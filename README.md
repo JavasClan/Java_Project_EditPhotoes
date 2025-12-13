@@ -11,3 +11,5 @@
 添加Doubao-Seedream-4.5图生图模型(ImageGenerationsExample)，可以实现从本地上传图片，输入操作指令，AI自动生成图片，并自动下载到指定路径
 
 新建集成客户端(IntegratedClient)，可自行选择使用DeepSeek  or  豆包图生图
+
+测试...
