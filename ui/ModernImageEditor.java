@@ -22,7 +22,7 @@ import java.util.Properties;
  */
 public class ModernImageEditor extends Application {
 
-    // 配置
+    // 配置test
     private static Properties config;
     
     // UI组件
