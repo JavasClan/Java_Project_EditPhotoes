@@ -145,12 +145,12 @@ public class ModernImageEditor extends Application {
      * 显示主窗口
      */
     private void showMainWindow() {
-        // 初始化图片编辑服务
+        // 只创建服务实例，不立即初始化
         try {
             imageEditorService = new ImageEditorService();
-            System.out.println("ImageEditorService 初始化成功");
+            System.out.println("ImageEditorService 实例创建成功（处理器将在加载图片后初始化）");
         } catch (Exception e) {
-            System.err.println("ImageEditorService 初始化失败: " + e.getMessage());
+            System.err.println("ImageEditorService 创建失败: " + e.getMessage());
             e.printStackTrace();
         }
 
@@ -193,7 +193,7 @@ public class ModernImageEditor extends Application {
             mainScene.getStylesheets().clear();
 
             // 确保路径正确
-            String basePath = "/imgedit/resources/styles/";
+            String basePath = "/src/resources/styles/";
 
             // 加载主样式表
             URL mainCssUrl = getClass().getResource(basePath + "main.css");
@@ -946,6 +946,11 @@ public class ModernImageEditor extends Application {
             showAlert("提示", "请先加载图片");
             return;
         }
+        if (imageEditorService == null) {
+            showAlert("提示", "图像编辑服务未初始化");
+            return;
+        }
+
         if (sliderValue >= 0) {
             // 增加亮度
             mode = imgedit.core.operations.BrightnessOperation.BrightnessMode.INCREASE;
@@ -1203,18 +1208,24 @@ public class ModernImageEditor extends Application {
                     scaleTransition.play();
 
                     updateStatus("已加载图片: " + file.getName());
-
                     try {
                         if (imageEditorService == null) {
                             imageEditorService = new ImageEditorService();
                         }
 
-                        // 初始化图片处理器（传递BufferedImage）
-                        if (currentBufferedImage != null) {
-                            imageEditorService.initImageProcessor(currentBufferedImage);
-                            System.out.println("图片处理器初始化成功");
+                        // ★★★ 修复：传递Image对象而不是BufferedImage ★★★
+                        if (currentImage != null) {
+                            imageEditorService.initImageProcessor(currentImage);
+                            System.out.println("图片处理器初始化成功 - 传递Image对象");
                         } else {
-                            System.err.println("currentBufferedImage为null，无法初始化处理器");
+                            System.err.println("currentImage为null，无法初始化处理器");
+                        }
+
+                        // 验证初始化是否成功
+                        if (imageEditorService.isInitialized()) {
+                            System.out.println("验证：图片处理器已成功初始化");
+                        } else {
+                            System.err.println("警告：图片处理器初始化验证失败");
                         }
                     } catch (Exception e) {
                         System.err.println("初始化ImageEditorService失败: " + e.getMessage());
@@ -1229,7 +1240,6 @@ public class ModernImageEditor extends Application {
                 showError("图片加载失败", e.getMessage());
                 e.printStackTrace();
             }
-
         }
     }
     

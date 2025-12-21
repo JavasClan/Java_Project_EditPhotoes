@@ -52,19 +52,45 @@ public class ImageEditorService {
     /**
      * 初始化图片处理器
      */
-    public void initImageProcessor(BufferedImage initialImage) {
+    public void initImageProcessor(Image initialImage) {
         if (initialImage == null) {
             throw new IllegalArgumentException("初始图片不能为null");
         }
 
-        BufferedImage bufferedImage = ImageUtils.fxImageToBufferedImage(initialImage);
-        this.imageProcessor = new ImageProcessor(bufferedImage);
+        System.out.println("=== initImageProcessor 开始 ===");
+        System.out.println("传入的Image尺寸: " + initialImage.getWidth() + "x" + initialImage.getHeight());
+
+        try {
+            BufferedImage bufferedImage = ImageUtils.fxImageToBufferedImage(initialImage);
+            System.out.println("转换后的BufferedImage: " +
+                    (bufferedImage != null ? bufferedImage.getWidth() + "x" + bufferedImage.getHeight() : "null"));
+
+            this.imageProcessor = new ImageProcessor(bufferedImage);
+            System.out.println("ImageProcessor创建成功");
+
+            // 验证imageProcessor是否已设置
+            if (this.imageProcessor != null) {
+                System.out.println("=== initImageProcessor 成功 ===");
+            } else {
+                System.err.println("=== initImageProcessor 警告：imageProcessor为null ===");
+            }
+        } catch (Exception e) {
+            System.err.println("=== initImageProcessor 失败 ===");
+            System.err.println("异常: " + e.getMessage());
+            e.printStackTrace();
+            throw e;
+        }
     }
 
     /**
      * 应用图片操作（同步方法）
      */
     public Image applyOperation(ImageOperation operation) {
+        // ★★★ 添加详细调试信息 ★★★
+        System.out.println("=== applyOperation 调用开始 ===");
+        System.out.println("imageProcessor 是否为null: " + (imageProcessor == null ? "是" : "否"));
+        System.out.println("operation 类型: " + operation.getClass().getName());
+
         if (imageProcessor == null) {
             throw new IllegalStateException("图片处理器未初始化，请先加载图片");
         }
@@ -76,8 +102,11 @@ public class ImageEditorService {
         try {
             imageProcessor.applyOperation(operation);
             BufferedImage processedImage = imageProcessor.getCurrentImage();
-            return ImageUtils.bufferedImageToFXImage(processedImage);
+            Image result = ImageUtils.bufferedImageToFXImage(processedImage);
+            System.out.println("=== applyOperation 调用成功 ===");
+            return result;
         } catch (Exception e) {
+            System.err.println("applyOperation 异常: " + e.getMessage());
             throw new RuntimeException("图片处理失败: " + e.getMessage(), e);
         }
     }
