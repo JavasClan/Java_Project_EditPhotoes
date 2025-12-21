@@ -16,6 +16,7 @@ package imgedit.core.exceptions;
  */
 public class ImageProcessingException extends Exception {
 
+
     public ImageProcessingException(String message) {
         super(message);
     }
@@ -33,5 +34,13 @@ public class ImageProcessingException extends Exception {
      */
     public String getUserFriendlyMessage() {
         return "图片处理错误: " + getMessage();
+    }
+
+    public enum ErrorCode {
+        IMAGE_NOT_LOADED,
+        OPERATION_NOT_SUPPORTED,
+        INVALID_PARAMETERS,
+        PROCESSING_TIMEOUT,
+        OUT_OF_MEMORY
     }
 }

@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/EditPhotoes.iml" filepath="$PROJECT_DIR$/EditPhotoes.iml" />
+      <module fileurl="file://$PROJECT_DIR$/deepseek.iml" filepath="$PROJECT_DIR$/deepseek.iml" />
     </modules>
   </component>
 </project>
