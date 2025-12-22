@@ -21,6 +21,7 @@ import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 import javafx.util.Duration;
 
+import java.awt.Rectangle;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.util.ArrayList;
@@ -301,7 +302,7 @@ public class ModernImageEditor extends Application {
                 String text = label.getText();
                 if (text.contains("🎛") || text.contains("🔄") || text.contains("✨") ||
                         text.contains("🤖") || text.contains("📜") || text.contains("ℹ️") ||
-                        text.contains("⚡")) {
+                        text.contains("⚡") || text.contains("✏️") || text.contains("✂️")) {
                     // 这是section label
                     updateSectionLabelStyle(label, theme);
                 }
@@ -319,7 +320,7 @@ public class ModernImageEditor extends Application {
      * 更新分段标签样式
      */
     private void updateSectionLabelStyle(Label label, Theme theme) {
-        String style = "";
+        String style;
         switch (theme) {
             case LIGHT_MODE: style = "-fx-text-fill: #2c3e50;"; break;
             case DARK_MODE: style = "-fx-text-fill: #ffffff;"; break;
@@ -329,6 +330,7 @@ public class ModernImageEditor extends Application {
             case ORANGE_SUNSET: style = "-fx-text-fill: #fb923c;"; break;
             case PINK_BLOSSOM: style = "-fx-text-fill: #f472b6;"; break;
             case CYBERPUNK: style = "-fx-text-fill: #00ff41;"; break;
+            default: style = "-fx-text-fill: #2c3e50;";
         }
         label.setStyle("-fx-font-size: 14px; -fx-font-weight: bold; " + style);
     }
@@ -337,7 +339,7 @@ public class ModernImageEditor extends Application {
      * 更新按钮样式
      */
     private void updateButtonStyle(Button button, Theme theme) {
-        String style = "";
+        String style;
         switch (theme) {
             case LIGHT_MODE:
                 style = "-fx-background-color: linear-gradient(to right, #667eea, #764ba2); " +
@@ -371,6 +373,9 @@ public class ModernImageEditor extends Application {
                 style = "-fx-background-color: linear-gradient(to right, #00ff41, #00cc33); " +
                         "-fx-text-fill: black;";
                 break;
+            default:
+                style = "-fx-background-color: linear-gradient(to right, #667eea, #764ba2); " +
+                        "-fx-text-fill: white;";
         }
         button.setStyle(style + " -fx-background-radius: 8; -fx-padding: 10 20; -fx-font-weight: bold; -fx-cursor: hand;");
     }
@@ -379,7 +384,7 @@ public class ModernImageEditor extends Application {
      * 更新分隔符样式
      */
     private void updateSeparatorStyle(Separator separator, Theme theme) {
-        String style = "";
+        String style;
         switch (theme) {
             case LIGHT_MODE: style = "-fx-background-color: #dee2e6;"; break;
             case DARK_MODE: style = "-fx-background-color: #404040;"; break;
@@ -389,6 +394,7 @@ public class ModernImageEditor extends Application {
             case ORANGE_SUNSET: style = "-fx-background-color: #9a3412;"; break;
             case PINK_BLOSSOM: style = "-fx-background-color: #9d174d;"; break;
             case CYBERPUNK: style = "-fx-background-color: #00ff41;"; break;
+            default: style = "-fx-background-color: #dee2e6;";
         }
         separator.setStyle(style);
     }
@@ -571,7 +577,6 @@ public class ModernImageEditor extends Application {
         for (int i = 0; i < themes.length; i++) {
             Theme theme = themes[i];
             VBox themeItem = createThemePreview(theme);
-            int finalI = i;
             themeItem.setOnMouseClicked(e -> {
                 applyTheme(theme);
                 dialog.close();
@@ -719,7 +724,7 @@ public class ModernImageEditor extends Application {
     }
 
     /**
-     * 创建左侧工具面板
+     * 创建左侧工具面板 - 添加绘图、裁剪、批量处理功能
      */
     private ScrollPane createLeftPanel() {
         leftPanel = new VBox(20);
@@ -735,9 +740,45 @@ public class ModernImageEditor extends Application {
 
         Separator sep1 = new Separator();
 
+        // 绘图工具
+        Label drawingLabel = createSectionLabel("✏️ 绘图工具");
+        FlowPane drawingButtons = new FlowPane(10, 10);
+        drawingButtons.setAlignment(Pos.CENTER_LEFT);
+
+        Button textBtn = createOperationButton("A 文字");
+        textBtn.setOnAction(e -> addText());
+
+        Button brushBtn = createOperationButton("🖌 画笔");
+        brushBtn.setOnAction(e -> startDrawing());
+
+        Button rectangleBtn = createOperationButton("⬜ 矩形");
+        rectangleBtn.setOnAction(e -> drawRectangle());
+
+        Button circleBtn = createOperationButton("⭕ 圆形");
+        circleBtn.setOnAction(e -> drawCircle());
+
+        drawingButtons.getChildren().addAll(textBtn, brushBtn, rectangleBtn, circleBtn);
+
+        Separator sep2 = new Separator();
+
+        // 裁剪工具
+        Label cropLabel = createSectionLabel("✂️ 裁剪");
+        Button cropBtn = new Button("选择裁剪区域");
+        cropBtn.setPrefWidth(Double.MAX_VALUE);
+        cropBtn.setOnAction(e -> startCrop());
+
+        Separator sep3 = new Separator();
+
+        // 批量处理
+        Label batchLabel = createSectionLabel("🔄 批量处理");
+        Button batchBtn = new Button("批量处理图片");
+        batchBtn.setPrefWidth(Double.MAX_VALUE);
+        batchBtn.setOnAction(e -> startBatchProcessing());
+
+        Separator sep4 = new Separator();
+
         // 变换操作
         Label transformLabel = createSectionLabel("🔄 变换");
-
         FlowPane transformButtons = new FlowPane(10, 10);
         transformButtons.setAlignment(Pos.CENTER_LEFT);
 
@@ -755,7 +796,7 @@ public class ModernImageEditor extends Application {
 
         transformButtons.getChildren().addAll(rotate90, rotate180, flipH, flipV);
 
-        Separator sep2 = new Separator();
+        Separator sep5 = new Separator();
 
         // 滤镜效果
         Label filterLabel = createSectionLabel("✨ 滤镜");
@@ -772,7 +813,7 @@ public class ModernImageEditor extends Application {
         edgeDetectBtn.setPrefWidth(Double.MAX_VALUE);
         edgeDetectBtn.setOnAction(e -> detectEdges());
 
-        Separator sep3 = new Separator();
+        Separator sep6 = new Separator();
 
         // AI功能
         Label aiLabel = createSectionLabel("🤖 AI增强");
@@ -791,9 +832,12 @@ public class ModernImageEditor extends Application {
 
         leftPanel.getChildren().addAll(
                 basicLabel, adjustmentPanel,
-                sep1, transformLabel, transformButtons,
-                sep2, filterLabel, blurControl, grayscaleBtn, edgeDetectBtn,
-                sep3, aiLabel, aiEnhanceBtn, removeBackground, artisticStyle
+                sep1, drawingLabel, drawingButtons,
+                sep2, cropLabel, cropBtn,
+                sep3, batchLabel, batchBtn,
+                sep4, transformLabel, transformButtons,
+                sep5, filterLabel, blurControl, grayscaleBtn, edgeDetectBtn,
+                sep6, aiLabel, aiEnhanceBtn, removeBackground, artisticStyle
         );
 
         ScrollPane scrollPane = new ScrollPane(leftPanel);
@@ -801,6 +845,417 @@ public class ModernImageEditor extends Application {
         scrollPane.setStyle("-fx-background-color: transparent;");
 
         return scrollPane;
+    }
+
+    // ==================== 绘图、裁剪、批量处理方法 ====================
+
+    /**
+     * 添加文字到图片
+     */
+    private void addText() {
+        if (currentImage == null) {
+            showWarning("提示", "请先加载图片");
+            return;
+        }
+
+        TextInputDialog dialog = new TextInputDialog("请输入文字");
+        dialog.setTitle("添加文字");
+        dialog.setHeaderText("输入要添加的文字");
+        dialog.setContentText("文字:");
+
+        dialog.showAndWait().ifPresent(text -> {
+            // 创建文字样式
+            DrawingOperation.TextStyle textStyle = new DrawingOperation.TextStyle(
+                    "Arial", 24, java.awt.Color.BLACK, false, false, false);
+
+            // 创建绘图元素
+            List<DrawingOperation.DrawingPoint> points = new ArrayList<>();
+            points.add(new DrawingOperation.DrawingPoint(50, 50));
+
+            DrawingOperation.DrawingElement element = new DrawingOperation.DrawingElement(
+                    DrawingOperation.DrawingType.TEXT, points, text, null, textStyle);
+
+            // 创建绘图操作
+            DrawingOperation operation = new DrawingOperation(element);
+            applyOperation(operation, "添加文字");
+        });
+    }
+
+    /**
+     * 开始绘制
+     */
+    private void startDrawing() {
+        showWarning("功能提示", "画笔功能需要在图像上直接绘制\n请等待后续版本实现交互式绘图");
+    }
+
+    /**
+     * 绘制矩形
+     */
+    private void drawRectangle() {
+        if (currentImage == null) {
+            showWarning("提示", "请先加载图片");
+            return;
+        }
+
+        // 创建画笔样式
+        DrawingOperation.BrushStyle brushStyle = new DrawingOperation.BrushStyle(
+                java.awt.Color.RED, 3, 1.0f);
+
+        // 创建绘图点（示例位置）
+        List<DrawingOperation.DrawingPoint> points = new ArrayList<>();
+        points.add(new DrawingOperation.DrawingPoint(50, 50));
+        points.add(new DrawingOperation.DrawingPoint(200, 150));
+
+        DrawingOperation.DrawingElement element = new DrawingOperation.DrawingElement(
+                DrawingOperation.DrawingType.RECTANGLE, points, null, brushStyle, null);
+
+        DrawingOperation operation = new DrawingOperation(element);
+        applyOperation(operation, "绘制矩形");
+    }
+
+    /**
+     * 绘制圆形
+     */
+    private void drawCircle() {
+        if (currentImage == null) {
+            showWarning("提示", "请先加载图片");
+            return;
+        }
+
+        // 创建画笔样式
+        DrawingOperation.BrushStyle brushStyle = new DrawingOperation.BrushStyle(
+                java.awt.Color.BLUE, 3, 1.0f);
+
+        // 创建绘图点（示例位置）
+        List<DrawingOperation.DrawingPoint> points = new ArrayList<>();
+        points.add(new DrawingOperation.DrawingPoint(100, 100));
+        points.add(new DrawingOperation.DrawingPoint(200, 200));
+
+        DrawingOperation.DrawingElement element = new DrawingOperation.DrawingElement(
+                DrawingOperation.DrawingType.CIRCLE, points, null, brushStyle, null);
+
+        DrawingOperation operation = new DrawingOperation(element);
+        applyOperation(operation, "绘制圆形");
+    }
+
+    /**
+     * 开始裁剪
+     */
+    private void startCrop() {
+        if (currentImage == null) {
+            showWarning("提示", "请先加载图片");
+            return;
+        }
+
+        // 创建裁剪对话框
+        Dialog<Rectangle> dialog = new Dialog<>();
+        dialog.setTitle("裁剪图片");
+        dialog.setHeaderText("输入裁剪区域");
+
+        GridPane grid = new GridPane();
+        grid.setHgap(10);
+        grid.setVgap(10);
+        grid.setPadding(new Insets(20, 150, 10, 10));
+
+        int imageWidth = (int) currentImage.getWidth();
+        int imageHeight = (int) currentImage.getHeight();
+
+        TextField xField = new TextField("0");
+        TextField yField = new TextField("0");
+        TextField widthField = new TextField(String.valueOf(imageWidth / 2));
+        TextField heightField = new TextField(String.valueOf(imageHeight / 2));
+
+        grid.add(new Label("X坐标:"), 0, 0);
+        grid.add(xField, 1, 0);
+        grid.add(new Label("Y坐标:"), 0, 1);
+        grid.add(yField, 1, 1);
+        grid.add(new Label("宽度:"), 0, 2);
+        grid.add(widthField, 1, 2);
+        grid.add(new Label("高度:"), 0, 3);
+        grid.add(heightField, 1, 3);
+
+        // 添加图片尺寸信息
+        Label sizeInfo = new Label(String.format("图片尺寸: %d × %d", imageWidth, imageHeight));
+        sizeInfo.setStyle("-fx-font-size: 11px; -fx-text-fill: gray;");
+        grid.add(sizeInfo, 0, 4, 2, 1);
+
+        dialog.getDialogPane().setContent(grid);
+        dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+
+        dialog.setResultConverter(dialogButton -> {
+            if (dialogButton == ButtonType.OK) {
+                try {
+                    int x = Integer.parseInt(xField.getText());
+                    int y = Integer.parseInt(yField.getText());
+                    int width = Integer.parseInt(widthField.getText());
+                    int height = Integer.parseInt(heightField.getText());
+
+                    return new Rectangle(x, y, width, height);
+                } catch (NumberFormatException e) {
+                    showError("输入错误", "请输入有效的数字");
+                    return null;
+                }
+            }
+            return null;
+        });
+
+        dialog.showAndWait().ifPresent(cropArea -> {
+            if (cropArea.width > 0 && cropArea.height > 0) {
+                CropOperation operation = new CropOperation(cropArea);
+                applyOperation(operation, "裁剪图片");
+            }
+        });
+    }
+
+    /**
+     * 开始批量处理
+     */
+    private void startBatchProcessing() {
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("选择多张图片");
+        fileChooser.getExtensionFilters().addAll(
+                new FileChooser.ExtensionFilter("图片文件", "*.png", "*.jpg", "*.jpeg", "*.bmp", "*.gif")
+        );
+
+        List<File> files = fileChooser.showOpenMultipleDialog(primaryStage);
+        if (files != null && !files.isEmpty()) {
+            showBatchProcessingDialog(files);
+        }
+    }
+
+    /**
+     * 显示批量处理对话框
+     */
+    private void showBatchProcessingDialog(List<File> files) {
+        Dialog<Void> dialog = new Dialog<>();
+        dialog.setTitle("批量处理");
+        dialog.setHeaderText("选择要应用的操作");
+
+        VBox content = new VBox(20);
+        content.setPadding(new Insets(20));
+        content.setPrefWidth(400);
+
+        Label infoLabel = new Label("已选择 " + files.size() + " 张图片");
+        infoLabel.setStyle("-fx-font-weight: bold;");
+
+        // 选择操作类型
+        ComboBox<String> operationCombo = new ComboBox<>();
+        operationCombo.getItems().addAll("灰度化", "调整亮度", "调整对比度", "调整饱和度", "模糊", "边缘检测", "旋转90度");
+        operationCombo.setValue("灰度化");
+
+        // 参数控制
+        VBox paramBox = new VBox(10);
+        paramBox.setVisible(false);
+
+        Slider paramSlider = new Slider(-100, 100, 0);
+        paramSlider.setShowTickLabels(true);
+        paramSlider.setShowTickMarks(true);
+
+        operationCombo.setOnAction(e -> {
+            paramBox.setVisible(!operationCombo.getValue().equals("灰度化") &&
+                    !operationCombo.getValue().equals("边缘检测") &&
+                    !operationCombo.getValue().equals("旋转90度"));
+        });
+
+        paramBox.getChildren().addAll(new Label("参数值:"), paramSlider);
+
+        // 输出设置
+        TextField suffixField = new TextField("_processed");
+        suffixField.setPromptText("输出文件后缀");
+
+        Button startBtn = new Button("开始批量处理");
+        startBtn.setOnAction(e -> {
+            executeBatchProcessing(files, operationCombo.getValue(),
+                    paramSlider.getValue(), suffixField.getText());
+            dialog.close();
+        });
+
+        content.getChildren().addAll(infoLabel,
+                new Label("选择操作:"), operationCombo,
+                paramBox,
+                new Label("输出文件后缀:"), suffixField,
+                startBtn);
+
+        dialog.getDialogPane().setContent(content);
+        dialog.getDialogPane().getButtonTypes().add(ButtonType.CANCEL);
+        dialog.showAndWait();
+    }
+
+    /**
+     * 执行批量处理
+     */
+    private void executeBatchProcessing(List<File> files, String operationType,
+                                        double paramValue, String suffix) {
+        showProgress("批量处理中...");
+
+        new Thread(() -> {
+            try {
+                List<BufferedImage> images = new ArrayList<>();
+                List<String> imageNames = new ArrayList<>();
+
+                // 加载所有图片
+                for (File file : files) {
+                    try {
+                        BufferedImage img = ImageIO.read(file);
+                        if (img != null) {
+                            images.add(img);
+                            imageNames.add(file.getName());
+                        }
+                    } catch (Exception e) {
+                        System.err.println("无法加载图片: " + file.getName() + " - " + e.getMessage());
+                    }
+                }
+
+                if (images.isEmpty()) {
+                    Platform.runLater(() -> {
+                        hideProgress();
+                        showError("批量处理失败", "无法加载任何图片");
+                    });
+                    return;
+                }
+
+                // 创建操作
+                ImageOperation operation = createBatchOperation(operationType, paramValue);
+
+                // 创建批量处理配置
+                List<BatchOperation.BatchTask> tasks = new ArrayList<>();
+                for (int i = 0; i < images.size(); i++) {
+                    List<ImageOperation> operations = new ArrayList<>();
+                    operations.add(operation);
+
+                    BatchOperation.BatchConfig config = new BatchOperation.BatchConfig(
+                            BatchOperation.BatchMode.SINGLE_OPERATION,
+                            operations,
+                            Math.min(4, Runtime.getRuntime().availableProcessors()),
+                            false,
+                            suffix
+                    );
+
+                    tasks.add(new BatchOperation.BatchTask(
+                            images.get(i),
+                            imageNames.get(i),
+                            config
+                    ));
+                }
+
+                // 执行批量处理
+                BatchOperation batchOp = BatchOperation.createSingleOperationBatch(tasks, operation);
+
+                // 创建进度监听器
+                BatchOperation.BatchProgressListener listener = new BatchOperation.BatchProgressListener() {
+                    private int processed = 0;
+
+                    @Override
+                    public void onProgress(String imageName, int processedCount, int total) {
+                        Platform.runLater(() -> {
+                            updateStatus(String.format("批量处理: %s (%d/%d)",
+                                    imageName, processedCount, total));
+                        });
+                    }
+
+                    @Override
+                    public void onTaskComplete(String imageName, boolean success) {
+                        processed++;
+                        Platform.runLater(() -> {
+                            if (success) {
+                                updateHistory("批量处理: " + imageName);
+                            }
+                        });
+                    }
+
+                    @Override
+                    public void onBatchComplete(int successCount, int total) {
+                        Platform.runLater(() -> {
+                            hideProgress();
+                            if (successCount == total) {
+                                showSuccess("批量处理完成",
+                                        String.format("成功处理 %d/%d 张图片", successCount, total));
+                            } else {
+                                showWarning("批量处理完成",
+                                        String.format("成功处理 %d/%d 张图片，失败 %d 张",
+                                                successCount, total, total - successCount));
+                            }
+                        });
+                    }
+                };
+
+                // 执行批量处理
+                List<BatchOperation.BatchResult> results = batchOp.executeBatch(listener);
+
+                // 保存处理后的图片
+                for (int i = 0; i < results.size(); i++) {
+                    BatchOperation.BatchResult result = results.get(i);
+                    if (result.isSuccess() && result.getResultImage() != null) {
+                        try {
+                            String originalName = imageNames.get(i);
+                            int dotIndex = originalName.lastIndexOf('.');
+                            String baseName = dotIndex > 0 ? originalName.substring(0, dotIndex) : originalName;
+                            String extension = dotIndex > 0 ? originalName.substring(dotIndex) : ".png";
+                            String newName = baseName + suffix + extension;
+                            File outputFile = new File(files.get(i).getParent(), newName);
+
+                            String format = extension.substring(1).toUpperCase();
+                            if (format.equals("JPG") || format.equals("JPEG")) {
+                                format = "JPEG";
+                            } else if (format.equals("PNG")) {
+                                format = "PNG";
+                            } else {
+                                format = "PNG";
+                            }
+
+                            ImageIO.write(result.getResultImage(), format, outputFile);
+                        } catch (Exception e) {
+                            System.err.println("保存失败: " + imageNames.get(i) + " - " + e.getMessage());
+                        }
+                    }
+                }
+
+            } catch (Exception e) {
+                Platform.runLater(() -> {
+                    hideProgress();
+                    showError("批量处理失败", e.getMessage());
+                    e.printStackTrace();
+                });
+            }
+        }).start();
+    }
+
+    /**
+     * 根据类型创建批量处理操作
+     */
+    private ImageOperation createBatchOperation(String operationType, double paramValue) {
+        switch (operationType) {
+            case "灰度化":
+                return GrayscaleOperation.create();
+            case "调整亮度":
+                BrightnessOperation.BrightnessMode mode = paramValue >= 0 ?
+                        BrightnessOperation.BrightnessMode.INCREASE :
+                        BrightnessOperation.BrightnessMode.DECREASE;
+                float intensity = (float)(Math.abs(paramValue) / 100.0);
+                return new BrightnessOperation(mode, intensity);
+            case "调整对比度":
+                float contrastLevel = (float)(paramValue / 100.0f + 1.0f);
+                return new ContrastOperation(contrastLevel);
+            case "调整饱和度":
+                float saturationFactor = (float)(paramValue / 100.0f + 1.0f);
+                return new SaturationOperation(saturationFactor);
+            case "模糊":
+                BlurOperation.BlurIntensity intensityLevel;
+                if (paramValue <= 33) {
+                    intensityLevel = BlurOperation.BlurIntensity.LIGHT;
+                } else if (paramValue <= 66) {
+                    intensityLevel = BlurOperation.BlurIntensity.MEDIUM;
+                } else {
+                    intensityLevel = BlurOperation.BlurIntensity.STRONG;
+                }
+                return new BlurOperation(intensityLevel);
+            case "边缘检测":
+                return EdgeDetectionOperation.createAllEdges();
+            case "旋转90度":
+                return RotateOperation.create90Degree();
+            default:
+                return GrayscaleOperation.create();
+        }
     }
 
     /**
@@ -1708,6 +2163,7 @@ public class ModernImageEditor extends Application {
                             updateHistory(operationName);
                             updateStatus(operationName + "完成");
                             hideProgress();
+                            playSuccessAnimation();
                         }),
                         exception -> Platform.runLater(() -> {
                             hideProgress();
@@ -1898,7 +2354,9 @@ public class ModernImageEditor extends Application {
                         "Ctrl+O - 打开图片\n" +
                         "Ctrl+S - 保存图片\n" +
                         "Ctrl+Z - 撤销\n" +
-                        "Ctrl+Y - 重做"
+                        "Ctrl+Y - 重做\n" +
+                        "Ctrl+T - 切换主题\n" +
+                        "Ctrl+Shift+T - 打开主题选择器"
         );
         alert.showAndWait();
     }
