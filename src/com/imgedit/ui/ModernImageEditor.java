@@ -1,5 +1,6 @@
 package imgedit.ui;
 
+import imgedit.core.ImageOperation;
 import imgedit.core.operations.*;
 import imgedit.service.ImageEditorService;
 import imgedit.utils.ImageUtils;
@@ -25,7 +26,12 @@ import java.awt.image.BufferedImage;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.prefs.Preferences;
+
 import javafx.scene.Node;
+
+import javax.imageio.ImageIO;
+import javax.swing.*;
 
 /**
  * 现代化图像编辑器 - 全新Material Design风格UI
@@ -51,6 +57,11 @@ public class ModernImageEditor extends Application {
     private VBox rightPanel;
     private ScrollPane imageScrollPane;
     private ListView<String> historyListView;
+
+    // 调整值缓存
+    private double brightnessValue = 0.0;
+    private double contrastValue = 0.0;
+    private double saturationValue = 0.0;
 
     // 状态
     private double currentZoom = 1.0;
@@ -274,17 +285,8 @@ public class ModernImageEditor extends Application {
         // 基础调整
         Label basicLabel = createSectionLabel("🎛 基础调整");
 
-        VBox brightnessControl = createSliderControl("亮度", -100, 100, 0, value -> {
-            adjustBrightness(value);
-        });
-
-        VBox contrastControl = createSliderControl("对比度", -100, 100, 0, value -> {
-            adjustContrast(value);
-        });
-
-        VBox saturationControl = createSliderControl("饱和度", -100, 100, 0, value -> {
-            adjustSaturation(value);
-        });
+        // 创建高级调整面板（包含亮度、对比度、饱和度）
+        VBox adjustmentPanel = createAdvancedAdjustmentPanel();
 
         Separator sep1 = new Separator();
 
@@ -343,7 +345,7 @@ public class ModernImageEditor extends Application {
         artisticStyle.setOnAction(e -> applyArtisticStyle());
 
         leftPanel.getChildren().addAll(
-                basicLabel, brightnessControl, contrastControl, saturationControl,
+                basicLabel, adjustmentPanel,
                 sep1, transformLabel, transformButtons,
                 sep2, filterLabel, blurControl, grayscaleBtn, edgeDetectBtn,
                 sep3, aiLabel, aiEnhanceBtn, removeBackground, artisticStyle
@@ -357,36 +359,332 @@ public class ModernImageEditor extends Application {
     }
 
     /**
-     * 创建中心图像显示区域
+     * 创建高级调整面板（包含亮度、对比度、饱和度）
+     */
+    private VBox createAdvancedAdjustmentPanel() {
+        VBox panel = new VBox(15);
+        panel.setPadding(new Insets(15));
+        panel.setStyle("-fx-background-color: #f8f9fa; -fx-border-radius: 8; -fx-border-color: #dee2e6; -fx-border-width: 1;");
+
+        Label title = new Label("🔧 基础调整");
+        title.setStyle("-fx-font-size: 14px; -fx-font-weight: bold; -fx-text-fill: #2c3e50;");
+
+        // 亮度调节滑块
+        VBox brightnessControl = createAdvancedSlider("亮度", -50, 50, brightnessValue, (value) -> {
+            brightnessValue = value;
+            updateStatus(String.format("亮度: %.0f", value));
+        });
+
+        // 对比度调节滑块
+        VBox contrastControl = createAdvancedSlider("对比度", -50, 50, contrastValue, (value) -> {
+            contrastValue = value;
+            updateStatus(String.format("对比度: %.0f", value));
+        });
+
+        // 饱和度调节滑块
+        VBox saturationControl = createAdvancedSlider("饱和度", -50, 50, saturationValue, (value) -> {
+            saturationValue = value;
+            updateStatus(String.format("饱和度: %.0f", value));
+        });
+
+        Separator separator = new Separator();
+
+        // 应用所有调整按钮 - 添加到这里
+        HBox buttonBox = createAdjustmentButtons();
+
+        panel.getChildren().addAll(
+                title,
+                brightnessControl,
+                contrastControl,
+                saturationControl,
+                separator,
+                buttonBox
+        );
+
+        return panel;
+    }
+
+    /**
+     * 创建调整按钮组
+     */
+    private HBox createAdjustmentButtons() {
+        HBox buttonBox = new HBox(10);
+        buttonBox.setAlignment(Pos.CENTER);
+        buttonBox.setPadding(new Insets(10, 0, 0, 0));
+
+        // 应用按钮
+        Button applyBtn = new Button("✅ 应用调整");
+        applyBtn.setStyle("-fx-background-color: linear-gradient(to right, #667eea, #764ba2); " +
+                "-fx-text-fill: white; " +
+                "-fx-background-radius: 8; " +
+                "-fx-padding: 10 20; " +
+                "-fx-font-weight: bold; " +
+                "-fx-cursor: hand; " +
+                "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.2), 5, 0, 0, 2);");
+        applyBtn.setOnAction(e -> applyAllAdjustments());
+
+        // 重置按钮
+        Button resetBtn = new Button("🔄 重置");
+        resetBtn.setStyle("-fx-background-color: #6c757d; " +
+                "-fx-text-fill: white; " +
+                "-fx-background-radius: 8; " +
+                "-fx-padding: 10 20; " +
+                "-fx-font-weight: bold; " +
+                "-fx-cursor: hand; " +
+                "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.2), 5, 0, 0, 2);");
+        resetBtn.setOnAction(e -> resetAllAdjustments());
+
+        buttonBox.getChildren().addAll(applyBtn, resetBtn);
+
+        return buttonBox;
+    }
+
+    /**
+     * 创建高级滑块控件
+     */
+    private VBox createAdvancedSlider(String label, double min, double max, double initialValue,
+                                      SliderChangeListener listener) {
+        VBox box = new VBox(8);
+        box.setPadding(new Insets(5));
+
+        HBox labelBox = new HBox(10);
+        labelBox.setAlignment(Pos.CENTER_LEFT);
+
+        Label nameLabel = new Label(label);
+        nameLabel.setStyle("-fx-font-size: 13px; -fx-font-weight: bold; -fx-text-fill: #495057;");
+
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+
+        Label valueLabel = new Label(String.format("%.0f", initialValue));
+        valueLabel.setId(label + "-value");
+        valueLabel.setStyle("-fx-font-size: 12px; -fx-text-fill: #6c757d; " +
+                "-fx-background-color: #e9ecef; " +
+                "-fx-background-radius: 4; " +
+                "-fx-padding: 2 8;");
+
+        labelBox.getChildren().addAll(nameLabel, spacer, valueLabel);
+
+        Slider slider = new Slider(min, max, initialValue);
+        slider.setShowTickMarks(true);
+        slider.setShowTickLabels(true);
+        slider.setMajorTickUnit(25);
+        slider.setMinorTickCount(5);
+        slider.setSnapToTicks(false);
+        slider.setStyle("-fx-control-inner-background: #e9ecef;");
+        slider.setId(label + "-slider");
+
+        slider.valueProperty().addListener((obs, oldVal, newVal) -> {
+            int intValue = newVal.intValue();
+            valueLabel.setText(String.format("%d", intValue));
+            if (listener != null) {
+                listener.onChange(newVal.doubleValue());
+            }
+        });
+
+        box.getChildren().addAll(labelBox, slider);
+
+        return box;
+    }
+
+    /**
+     * 应用所有调整
+     */
+    private void applyAllAdjustments() {
+        if (currentImage == null || imageEditorService == null) {
+            showWarning("提示", "请先加载图片");
+            return;
+        }
+
+        // 检查是否有调整需要应用
+        if (brightnessValue == 0 && contrastValue == 0 && saturationValue == 0) {
+            showWarning("提示", "请先调整滑块参数");
+            return;
+        }
+
+        showProgress("正在应用调整...");
+
+        new Thread(() -> {
+            try {
+                // 保存原始图片用于回退
+                Image originalImage = currentImage;
+
+                // 依次应用调整
+                if (brightnessValue != 0) {
+                    BrightnessOperation.BrightnessMode mode = brightnessValue >= 0 ?
+                            BrightnessOperation.BrightnessMode.INCREASE :
+                            BrightnessOperation.BrightnessMode.DECREASE;
+                    float intensity = (float)(Math.abs(brightnessValue) / 100.0);
+                    BrightnessOperation brightnessOp = new BrightnessOperation(mode, intensity);
+
+                    imageEditorService.applyOperationAsync(
+                            brightnessOp,
+                            resultImage -> Platform.runLater(() -> {
+                                currentImage = resultImage;
+                                imageView.setImage(currentImage);
+                                currentBufferedImage = ImageUtils.fxImageToBufferedImage(currentImage);
+                            }),
+                            exception -> Platform.runLater(() -> {
+                                showError("亮度调整失败", exception.getMessage());
+                            })
+                    );
+
+                    Thread.sleep(100); // 短暂延迟，确保顺序执行
+                }
+
+                if (contrastValue != 0) {
+                    float contrastLevel = (float)(contrastValue / 100.0f + 1.0f);
+                    ContrastOperation contrastOp = new ContrastOperation(contrastLevel);
+
+                    imageEditorService.applyOperationAsync(
+                            contrastOp,
+                            resultImage -> Platform.runLater(() -> {
+                                currentImage = resultImage;
+                                imageView.setImage(currentImage);
+                                currentBufferedImage = ImageUtils.fxImageToBufferedImage(currentImage);
+                            }),
+                            exception -> Platform.runLater(() -> {
+                                showError("对比度调整失败", exception.getMessage());
+                            })
+                    );
+
+                    Thread.sleep(100);
+                }
+
+                if (saturationValue != 0) {
+                    // 饱和度调整（使用对比度模拟）
+                    float saturationLevel = (float)(saturationValue / 100.0f + 1.0f);
+                    ContrastOperation saturationOp = new ContrastOperation(saturationLevel * 0.5f);
+
+                    imageEditorService.applyOperationAsync(
+                            saturationOp,
+                            resultImage -> Platform.runLater(() -> {
+                                currentImage = resultImage;
+                                imageView.setImage(currentImage);
+                                currentBufferedImage = ImageUtils.fxImageToBufferedImage(currentImage);
+                            }),
+                            exception -> Platform.runLater(() -> {
+                                showError("饱和度调整失败", exception.getMessage());
+                            })
+                    );
+
+                    Thread.sleep(100);
+                }
+
+                // 等待所有操作完成
+                Thread.sleep(300);
+
+                Platform.runLater(() -> {
+                    // 更新图像显示
+                    imageView.setImage(currentImage);
+                    updateHistory("基础调整");
+                    updateStatus("基础调整已应用");
+                    hideProgress();
+                    playSuccessAnimation();
+
+                    // 显示调整摘要
+                    StringBuilder summary = new StringBuilder("已应用调整:\n");
+                    if (brightnessValue != 0) {
+                        summary.append("• 亮度: ").append(brightnessValue).append("\n");
+                    }
+                    if (contrastValue != 0) {
+                        summary.append("• 对比度: ").append(contrastValue).append("\n");
+                    }
+                    if (saturationValue != 0) {
+                        summary.append("• 饱和度: ").append(saturationValue).append("\n");
+                    }
+
+                    showSuccess("调整完成", summary.toString());
+                });
+
+            } catch (Exception e) {
+                Platform.runLater(() -> {
+                    hideProgress();
+                    showError("调整失败", e.getMessage());
+                });
+            }
+        }).start();
+    }
+
+    /**
+     * 重置所有调整
+     */
+    private void resetAllAdjustments() {
+        // 重置缓存值
+        brightnessValue = 0.0;
+        contrastValue = 0.0;
+        saturationValue = 0.0;
+
+        // 更新滑块显示
+        Slider brightnessSlider = (Slider) leftPanel.lookup("#亮度-slider");
+        Slider contrastSlider = (Slider) leftPanel.lookup("#对比度-slider");
+        Slider saturationSlider = (Slider) leftPanel.lookup("#饱和度-slider");
+
+        if (brightnessSlider != null) {
+            brightnessSlider.setValue(0);
+            Label brightnessValueLabel = (Label) leftPanel.lookup("#亮度-value");
+            if (brightnessValueLabel != null) {
+                brightnessValueLabel.setText("0");
+            }
+        }
+
+        if (contrastSlider != null) {
+            contrastSlider.setValue(0);
+            Label contrastValueLabel = (Label) leftPanel.lookup("#对比度-value");
+            if (contrastValueLabel != null) {
+                contrastValueLabel.setText("0");
+            }
+        }
+
+        if (saturationSlider != null) {
+            saturationSlider.setValue(0);
+            Label saturationValueLabel = (Label) leftPanel.lookup("#饱和度-value");
+            if (saturationValueLabel != null) {
+                saturationValueLabel.setText("0");
+            }
+        }
+
+        // 如果已加载图片，重置到原始状态
+        if (currentImageFile != null) {
+            loadImage(currentImageFile);
+        }
+
+        updateStatus("调整已重置");
+        showSuccess("重置完成", "所有调整已重置为默认值");
+    }
+
+    /**
+     * 创建中心图像显示区域 - 去掉白色外框
      */
     private StackPane createCenterPanel() {
         StackPane centerPane = new StackPane();
         centerPane.setStyle("-fx-background-color: #f5f7fa;");
 
-        // 图像容器
+        // 图像容器 - 简化容器，去掉多余的外框
         VBox imageContainer = new VBox(20);
         imageContainer.setAlignment(Pos.CENTER);
-        imageContainer.setPadding(new Insets(30));
+        imageContainer.setPadding(new Insets(20)); // 减少内边距
 
         // 图像视图
         imageView = new ImageView();
         imageView.setPreserveRatio(true);
         imageView.setSmooth(true);
-        imageView.setFitWidth(800);
-        imageView.setFitHeight(600);
 
-        // 图像背景（棋盘格）
+        // 移除白色外框和阴影，只保留简单的容器
         StackPane imagePane = new StackPane();
-        imagePane.setStyle("-fx-background-color: white; " +
-                "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.2), 20, 0, 0, 5); " +
-                "-fx-background-radius: 10;");
-        imagePane.setPadding(new Insets(20));
+        imagePane.setStyle("-fx-background-color: transparent;");
         imagePane.getChildren().add(imageView);
 
         // 图像控制按钮
         HBox controlButtons = new HBox(15);
         controlButtons.setAlignment(Pos.CENTER);
-        controlButtons.setId("control-buttons"); // 添加ID以便查找
+        controlButtons.setId("control-buttons");
+
+        // 添加轻微阴影效果到按钮，让它们更可见
+        controlButtons.setStyle("-fx-background-color: rgba(255,255,255,0.9); " +
+                "-fx-background-radius: 15; " +
+                "-fx-padding: 8 15; " +
+                "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.1), 5, 0, 0, 2);");
 
         Button zoomIn = createIconButton("➕", "放大");
         zoomIn.setOnAction(e -> zoomIn());
@@ -409,12 +707,13 @@ public class ModernImageEditor extends Application {
         imageScrollPane.setFitToWidth(true);
         imageScrollPane.setFitToHeight(true);
         imageScrollPane.setStyle("-fx-background-color: transparent;");
-        imageScrollPane.setId("image-scroll-pane"); // 添加ID
+        imageScrollPane.setId("image-scroll-pane");
 
-        // 占位符 - 直接创建为VBox
+        // 占位符
         VBox placeholder = new VBox(20);
         placeholder.setAlignment(Pos.CENTER);
         placeholder.setId("placeholder");
+        placeholder.setStyle("-fx-background-color: transparent;");
 
         Label placeholderIcon = new Label("📷");
         placeholderIcon.setStyle("-fx-font-size: 80px; -fx-opacity: 0.3;");
@@ -561,22 +860,28 @@ public class ModernImageEditor extends Application {
     private Button createIconButton(String icon, String tooltip) {
         Button btn = new Button(icon);
         btn.setTooltip(new Tooltip(tooltip));
-        btn.setStyle("-fx-background-color: #ecf0f1; " +
+        btn.setStyle("-fx-background-color: rgba(255,255,255,0.8); " +
                 "-fx-background-radius: 8; " +
                 "-fx-padding: 8 12; " +
-                "-fx-cursor: hand;");
+                "-fx-cursor: hand; " +
+                "-fx-border-color: #dee2e6; " +
+                "-fx-border-width: 1;");
 
         btn.setOnMouseEntered(e -> btn.setStyle(
-                "-fx-background-color: #d5dbdb; " +
+                "-fx-background-color: rgba(255,255,255,1); " +
                         "-fx-background-radius: 8; " +
                         "-fx-padding: 8 12; " +
-                        "-fx-cursor: hand;"
+                        "-fx-cursor: hand; " +
+                        "-fx-border-color: #adb5bd; " +
+                        "-fx-border-width: 1;"
         ));
         btn.setOnMouseExited(e -> btn.setStyle(
-                "-fx-background-color: #ecf0f1; " +
+                "-fx-background-color: rgba(255,255,255,0.8); " +
                         "-fx-background-radius: 8; " +
                         "-fx-padding: 8 12; " +
-                        "-fx-cursor: hand;"
+                        "-fx-cursor: hand; " +
+                        "-fx-border-color: #dee2e6; " +
+                        "-fx-border-width: 1;"
         ));
 
         return btn;
@@ -700,18 +1005,28 @@ public class ModernImageEditor extends Application {
                         }
                     }
 
-                    // 调整图片显示大小
+                    // 调整图片显示大小 - 使用更合理的初始大小
                     if (currentImage.getWidth() > 0 && currentImage.getHeight() > 0) {
-                        double aspectRatio = currentImage.getWidth() / currentImage.getHeight();
-                        if (aspectRatio > 1) {
-                            // 宽大于高
-                            imageView.setFitWidth(800);
-                            imageView.setFitHeight(800 / aspectRatio);
-                        } else {
-                            // 高大于宽
-                            imageView.setFitHeight(600);
-                            imageView.setFitWidth(600 * aspectRatio);
-                        }
+                        double imageWidth = currentImage.getWidth();
+                        double imageHeight = currentImage.getHeight();
+                        double maxWidth = 1000; // 最大显示宽度
+                        double maxHeight = 700; // 最大显示高度
+
+                        // 计算缩放比例
+                        double widthRatio = maxWidth / imageWidth;
+                        double heightRatio = maxHeight / imageHeight;
+                        double scaleRatio = Math.min(widthRatio, heightRatio);
+
+                        // 应用缩放，但确保不超过原始尺寸
+                        scaleRatio = Math.min(scaleRatio, 1.0);
+
+                        imageView.setFitWidth(imageWidth * scaleRatio);
+                        imageView.setFitHeight(imageHeight * scaleRatio);
+
+                        // 重置缩放级别
+                        currentZoom = 1.0;
+                        imageView.setScaleX(currentZoom);
+                        imageView.setScaleY(currentZoom);
                     }
 
                     // 初始化服务
@@ -720,7 +1035,8 @@ public class ModernImageEditor extends Application {
                     }
 
                     updateHistory("打开图片: " + file.getName());
-                    updateStatus("图片已加载: " + file.getName());
+                    updateStatus("图片已加载: " + file.getName() + " (" +
+                            (int)currentImage.getWidth() + "×" + (int)currentImage.getHeight() + ")");
                     hideProgress();
 
                     // 播放加载动画
@@ -761,7 +1077,7 @@ public class ModernImageEditor extends Application {
                     String format = getFileExtension(file.getName()).toUpperCase();
                     if (format.equals("JPG")) format = "JPEG";
 
-                    javax.imageio.ImageIO.write(bufferedImage, format, file);
+                    ImageIO.write(bufferedImage, format, file);
 
                     Platform.runLater(() -> {
                         hideProgress();
@@ -985,7 +1301,7 @@ public class ModernImageEditor extends Application {
         new Thread(() -> {
             try {
                 imageEditorService.applyOperationAsync(
-                        (imgedit.core.ImageOperation) operation,
+                        (ImageOperation) operation,
                         resultImage -> Platform.runLater(() -> {
                             currentImage = resultImage;
                             imageView.setImage(currentImage);
@@ -1094,11 +1410,26 @@ public class ModernImageEditor extends Application {
     }
 
     private void fitToWindow() {
-        currentZoom = 1.0;
-        imageView.setScaleX(currentZoom);
-        imageView.setScaleY(currentZoom);
-        imageView.setFitWidth(800);
-        imageView.setFitHeight(600);
+        if (currentImage != null) {
+            currentZoom = 1.0;
+            imageView.setScaleX(currentZoom);
+            imageView.setScaleY(currentZoom);
+
+            // 计算适合窗口的大小
+            double maxWidth = 1000;
+            double maxHeight = 700;
+            double imageWidth = currentImage.getWidth();
+            double imageHeight = currentImage.getHeight();
+
+            double widthRatio = maxWidth / imageWidth;
+            double heightRatio = maxHeight / imageHeight;
+            double scaleRatio = Math.min(widthRatio, heightRatio);
+
+            scaleRatio = Math.min(scaleRatio, 1.0);
+
+            imageView.setFitWidth(imageWidth * scaleRatio);
+            imageView.setFitHeight(imageHeight * scaleRatio);
+        }
     }
 
     private void resetZoom() {
