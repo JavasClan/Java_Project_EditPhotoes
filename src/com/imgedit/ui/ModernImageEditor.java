@@ -48,6 +48,13 @@ import org.apache.commons.codec.binary.Base64;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 import java.io.IOException;
+import javafx.scene.SnapshotParameters;
+import javafx.scene.image.WritableImage;
+import javafx.scene.paint.ImagePattern;
+import javafx.scene.layout.Background;
+import javafx.scene.layout.BackgroundFill;
+import javafx.scene.layout.CornerRadii;
+import javafx.geometry.Orientation;
 
 /**
  * 现代化图像编辑器 - 支持多种高级主题 + 豆包图生图功能
@@ -139,18 +146,69 @@ public class ModernImageEditor extends Application {
     private Properties arkConfig;
     private boolean arkAvailable = false;
 
+    private StackPane loadingOverlay; // 全局加载层
+    private Label loadingText;        // 加载提示文字
+
     @Override
     public void start(Stage stage) {
         this.primaryStage = stage;
 
-        // 加载豆包图生图配置
+        // 1. 加载配置和主题
         loadArkConfig();
-
         initializeThemes();
 
-        // 显示启动动画
+        // 2. 显示启动画面
         showSplashScreen(() -> {
-            Platform.runLater(this::initializeMainWindow);
+            Platform.runLater(() -> {
+                // 3. 初始化主界面
+                initializeMainWindow();
+
+                // 4. [修正] 加载 CSS (路径: src/resources/styles/main.css)
+                try {
+                    // 定义硬盘上的源码路径 (用于开发环境调试)
+                    String localPath = "src/resources/styles/main.css";
+
+                    // 方案 A: 优先尝试直接读取硬盘文件 (最稳妥，所见即所得)
+                    java.io.File cssFile = new java.io.File(localPath);
+
+                    if (cssFile.exists()) {
+                        // 如果硬盘上文件存在，直接加载
+                        String uri = cssFile.toURI().toString();
+                        mainScene.getStylesheets().add(uri);
+                        System.out.println("✅ (硬盘模式) CSS 加载成功: " + cssFile.getAbsolutePath());
+                    } else {
+                        // 方案 B: 如果硬盘找不到，尝试从 classpath 加载 (用于打包后的环境)
+                        // 通常 resources 目录被标记为资源根目录后，读取时不需要带 "resources/" 前缀
+                        String[] resourcePaths = {
+                                "/styles/main.css",           // 标准 Maven/Gradle 结构
+                                "/resources/styles/main.css", // 如果 resources 只是普通包
+                                "styles/main.css"             // 相对路径尝试
+                        };
+
+                        boolean loaded = false;
+                        for (String path : resourcePaths) {
+                            java.net.URL url = getClass().getResource(path);
+                            if (url == null) url = getClass().getClassLoader().getResource(path);
+
+                            if (url != null) {
+                                mainScene.getStylesheets().add(url.toExternalForm());
+                                System.out.println("✅ (资源模式) CSS 加载成功: " + path);
+                                loaded = true;
+                                break;
+                            }
+                        }
+
+                        if (!loaded) {
+                            System.err.println("❌ 错误: 找不到 CSS 文件！");
+                            System.err.println("   请确认文件路径是: " + cssFile.getAbsolutePath());
+                        }
+                    }
+
+                } catch (Exception e) {
+                    System.err.println("❌ CSS 加载异常: " + e.getMessage());
+                    e.printStackTrace();
+                }
+            });
         });
     }
 
@@ -238,122 +296,132 @@ public class ModernImageEditor extends Application {
      * 应用当前主题
      */
     private void applyTheme(Theme theme) {
-        // ... 现有代码保持不变 ...
         currentTheme = theme;
-
         String style = themeStyles.get(theme);
-        root.setStyle(style);
-        updatePanelStyles(theme);
+
+        if (root != null) {
+            root.setStyle(style);
+            // [新增] 美化滚动条
+            root.lookupAll(".scroll-bar").forEach(node ->
+                    node.setStyle("-fx-background-color: transparent; -fx-block-increment: 0;"));
+            root.lookupAll(".scroll-bar .thumb").forEach(node ->
+                    node.setStyle("-fx-background-color: derive(-fx-base, -20%); -fx-background-radius: 5em;"));
+
+            updatePanelStyles(theme);
+            // [新增] 调用背景更新
+            updateCenterPanelStyle(theme);
+        }
         updateStatus("已切换主题: " + theme.getDisplayName());
-        playThemeSwitchAnimation();
+    }
+
+    private void updateCenterPanelStyle(Theme theme) {
+        // 查找 createCenterPanel 中定义的 StackPane
+        Node centerNode = root.getCenter();
+        if (centerNode instanceof StackPane) {
+            StackPane centerPane = (StackPane) centerNode;
+
+            String color = "#e3e6ea"; // 默认浅色背景基色
+            if (theme == Theme.DARK_MODE || theme == Theme.CYBERPUNK || theme == Theme.BLUE_NIGHT) {
+                color = "#1e1e1e";
+            } else if (theme == Theme.ORANGE_SUNSET) {
+                color = "#431407";
+            } else if (theme == Theme.GREEN_FOREST) {
+                color = "#022c22";
+            }
+            // 应用动态生成的棋盘格
+            centerPane.setBackground(createCheckerboardBackground(color));
+        }
     }
 
     /**
      * 更新所有面板的样式
      */
     private void updatePanelStyles(Theme theme) {
-        // ... 现有代码保持不变 ...
-        String panelStyle = "";
-        String buttonStyle = "";
-        String sectionStyle = "";
-        String infoBoxStyle = "";
-        String listStyle = "";
+        // 定义主题颜色
+        String mainBg, cardBg, textColor, titleColor;
+        String sliderTrack, sliderThumb;
 
         switch (theme) {
-            case LIGHT_MODE:
-                panelStyle = "-fx-background-color: white;";
-                buttonStyle = "-fx-background-color: linear-gradient(to right, #667eea, #764ba2); " +
-                        "-fx-text-fill: white;";
-                sectionStyle = "-fx-text-fill: #2c3e50;";
-                infoBoxStyle = "-fx-background-color: #f8f9fa; -fx-background-radius: 8;";
-                listStyle = "-fx-background-color: white; -fx-background-radius: 8;";
-                break;
-
             case DARK_MODE:
-                panelStyle = "-fx-background-color: #1e1e1e;";
-                buttonStyle = "-fx-background-color: linear-gradient(to right, #7b2cbf, #9d4edd); " +
-                        "-fx-text-fill: white;";
-                sectionStyle = "-fx-text-fill: #ffffff;";
-                infoBoxStyle = "-fx-background-color: #2d2d2d; -fx-background-radius: 8;";
-                listStyle = "-fx-background-color: #2d2d2d; -fx-background-radius: 8;";
-                break;
-
-            case BLUE_NIGHT:
-                panelStyle = "-fx-background-color: #1e293b;";
-                buttonStyle = "-fx-background-color: linear-gradient(to right, #0ea5e9, #3b82f6); " +
-                        "-fx-text-fill: white;";
-                sectionStyle = "-fx-text-fill: #38bdf8;";
-                infoBoxStyle = "-fx-background-color: #0f172a; -fx-background-radius: 8;";
-                listStyle = "-fx-background-color: #1e293b; -fx-background-radius: 8;";
-                break;
-
-            case GREEN_FOREST:
-                panelStyle = "-fx-background-color: #064e3b;";
-                buttonStyle = "-fx-background-color: linear-gradient(to right, #10b981, #059669); " +
-                        "-fx-text-fill: white;";
-                sectionStyle = "-fx-text-fill: #34d399;";
-                infoBoxStyle = "-fx-background-color: #022c22; -fx-background-radius: 8;";
-                listStyle = "-fx-background-color: #064e3b; -fx-background-radius: 8;";
-                break;
-
-            case PURPLE_DREAM:
-                panelStyle = "-fx-background-color: #312e81;";
-                buttonStyle = "-fx-background-color: linear-gradient(to right, #8b5cf6, #7c3aed); " +
-                        "-fx-text-fill: white;";
-                sectionStyle = "-fx-text-fill: #a78bfa;";
-                infoBoxStyle = "-fx-background-color: #1e1b4b; -fx-background-radius: 8;";
-                listStyle = "-fx-background-color: #312e81; -fx-background-radius: 8;";
-                break;
-
-            case ORANGE_SUNSET:
-                panelStyle = "-fx-background-color: #7c2d12;";
-                buttonStyle = "-fx-background-color: linear-gradient(to right, #f97316, #ea580c); " +
-                        "-fx-text-fill: white;";
-                sectionStyle = "-fx-text-fill: #fb923c;";
-                infoBoxStyle = "-fx-background-color: #431407; -fx-background-radius: 8;";
-                listStyle = "-fx-background-color: #7c2d12; -fx-background-radius: 8;";
-                break;
-
-            case PINK_BLOSSOM:
-                panelStyle = "-fx-background-color: #831843;";
-                buttonStyle = "-fx-background-color: linear-gradient(to right, #ec4899, #db2777); " +
-                        "-fx-text-fill: white;";
-                sectionStyle = "-fx-text-fill: #f472b6;";
-                infoBoxStyle = "-fx-background-color: #500724; -fx-background-radius: 8;";
-                listStyle = "-fx-background-color: #831843; -fx-background-radius: 8;";
-                break;
-
             case CYBERPUNK:
-                panelStyle = "-fx-background-color: #0f0f23;";
-                buttonStyle = "-fx-background-color: linear-gradient(to right, #00ff41, #00cc33); " +
-                        "-fx-text-fill: black;";
-                sectionStyle = "-fx-text-fill: #00ff41;";
-                infoBoxStyle = "-fx-background-color: #000000; -fx-background-radius: 8;";
-                listStyle = "-fx-background-color: #0f0f23; -fx-background-radius: 8;";
+            case BLUE_NIGHT:
+            case GREEN_FOREST:
+            case PURPLE_DREAM:
+                mainBg = themeStyles.get(theme).split(";")[0].split(":")[1]; // 简单提取背景色
+                cardBg = "rgba(255,255,255,0.08)"; // 深色模式下的半透明卡片
+                textColor = "#e0e0e0";
+                titleColor = "#ffffff";
+                sliderTrack = "#555";
+                sliderThumb = "#ccc";
+                break;
+            default: // Light Mode & others
+                mainBg = themeStyles.get(theme).split(";")[0].split(":")[1];
+                cardBg = "rgba(255,255,255,0.8)"; // 浅色模式下的白卡片
+                textColor = "#333";
+                titleColor = "#2c3e50";
+                sliderTrack = "#e0e0e0";
+                sliderThumb = "#667eea";
                 break;
         }
 
-        if (leftPanel != null) {
-            leftPanel.setStyle(panelStyle);
-            updatePanelComponents(leftPanel, theme);
-        }
-        if (rightPanel != null) {
-            rightPanel.setStyle(panelStyle);
-            updatePanelComponents(rightPanel, theme);
-        }
+        // 应用全局背景
+        if (root != null) root.setStyle("-fx-background-color: " + mainBg + ";");
 
-        if (historyListView != null) {
-            historyListView.setStyle(listStyle);
-        }
+        // 递归更新所有节点样式
+        updateRecursiveStyle(root, cardBg, textColor, titleColor, theme);
+    }
 
-        HBox bottomBar = (HBox) root.getBottom();
-        if (bottomBar != null) {
-            bottomBar.setStyle(panelStyle);
-        }
+    private void updateRecursiveStyle(Node node, String cardBg, String textColor, String titleColor, Theme theme) {
+        if (node instanceof javafx.scene.Parent) {
+            javafx.scene.Parent parent = (javafx.scene.Parent) node;
 
-        HBox topBar = (HBox) root.getTop();
-        if (topBar != null) {
-            topBar.setStyle(panelStyle);
+            // 1. 卡片样式 (保留 Java 控制，方便主题切换背景色)
+            if ("content-card".equals(node.getId())) {
+                // 增加 backdrop-filter 模拟效果，阴影加深
+                node.setStyle("-fx-background-color: " + cardBg + "; -fx-background-radius: 16; -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.15), 15, 0, 0, 4); -fx-padding: 20;");
+            }
+
+            // 2. 标签样式
+            if (node instanceof Label) {
+                Label l = (Label) node;
+                if ("card-title".equals(l.getId())) {
+                    l.setStyle("-fx-text-fill: " + titleColor + "; -fx-font-weight: bold; -fx-font-size: 15px; -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.05), 2, 0, 0, 1);");
+                } else if (l.getId() != null && l.getId().contains("value")) {
+                    // 数值标签
+                    l.getStyleClass().add("value-label"); // 交给 CSS
+                } else {
+                    // 普通标签，交给 CSS，除非是大 Logo
+                    if (!l.getStyle().contains("-fx-font-size: 60px")) {
+                        l.setStyle("-fx-text-fill: " + textColor + ";");
+                    }
+                }
+            }
+
+            // 3. 【关键】按钮 (Button) - 全部删除 setStyle，交给 CSS
+            if (node instanceof Button) {
+                Button btn = (Button) node;
+                // 为了让 CSS 区分功能按钮和图标按钮，我们可以清除之前的 inline style
+                // 只保留必要的结构属性，不设置颜色
+                btn.setStyle("");
+            }
+
+            // 4. 【关键】工具按钮 (ToggleButton) - 交给 CSS
+            if (node instanceof ToggleButton) {
+                ToggleButton tb = (ToggleButton) node;
+                tb.setStyle("");
+            }
+
+            // 5. 滑块 - 仅设置基色
+            if (node instanceof Slider) {
+                Slider s = (Slider) node;
+                String accent = (theme == Theme.LIGHT_MODE) ? "#7f5af0" : "#2cb67d"; // 华丽的紫色或绿色
+                s.setStyle("-fx-base: " + accent + ";");
+            }
+
+            // 递归
+            for (Node child : parent.getChildrenUnmodifiable()) {
+                updateRecursiveStyle(child, cardBg, textColor, titleColor, theme);
+            }
         }
     }
 
@@ -405,46 +473,36 @@ public class ModernImageEditor extends Application {
      * 更新按钮样式
      */
     private void updateButtonStyle(Button button, Theme theme) {
-        // ... 现有代码保持不变 ...
-        String style;
+        // 跳过控制条的小按钮
+        if (button.getParent() != null && "control-buttons".equals(button.getParent().getId())) return;
+        // 跳过功能图标按钮（那些 createIconButton 创建的）
+        if (button.getText() != null && (button.getText().equals(" ➕ ") || button.getText().equals(" ➖ "))) return;
+
+        String gradient;
         switch (theme) {
-            case LIGHT_MODE:
-                style = "-fx-background-color: linear-gradient(to right, #667eea, #764ba2); " +
-                        "-fx-text-fill: white;";
-                break;
-            case DARK_MODE:
-                style = "-fx-background-color: linear-gradient(to right, #7b2cbf, #9d4edd); " +
-                        "-fx-text-fill: white;";
-                break;
-            case BLUE_NIGHT:
-                style = "-fx-background-color: linear-gradient(to right, #0ea5e9, #3b82f6); " +
-                        "-fx-text-fill: white;";
-                break;
-            case GREEN_FOREST:
-                style = "-fx-background-color: linear-gradient(to right, #10b981, #059669); " +
-                        "-fx-text-fill: white;";
-                break;
-            case PURPLE_DREAM:
-                style = "-fx-background-color: linear-gradient(to right, #8b5cf6, #7c3aed); " +
-                        "-fx-text-fill: white;";
-                break;
-            case ORANGE_SUNSET:
-                style = "-fx-background-color: linear-gradient(to right, #f97316, #ea580c); " +
-                        "-fx-text-fill: white;";
-                break;
-            case PINK_BLOSSOM:
-                style = "-fx-background-color: linear-gradient(to right, #ec4899, #db2777); " +
-                        "-fx-text-fill: white;";
-                break;
-            case CYBERPUNK:
-                style = "-fx-background-color: linear-gradient(to right, #00ff41, #00cc33); " +
-                        "-fx-text-fill: black;";
-                break;
-            default:
-                style = "-fx-background-color: linear-gradient(to right, #667eea, #764ba2); " +
-                        "-fx-text-fill: white;";
+            case LIGHT_MODE: gradient = "linear-gradient(to right, #667eea, #764ba2)"; break;
+            case DARK_MODE: gradient = "linear-gradient(to right, #7b2cbf, #9d4edd)"; break;
+            case CYBERPUNK: gradient = "linear-gradient(to right, #00ff41, #00cc33)"; break;
+            case BLUE_NIGHT: gradient = "linear-gradient(to right, #0ea5e9, #3b82f6)"; break;
+            case GREEN_FOREST: gradient = "linear-gradient(to right, #10b981, #059669)"; break;
+            case PURPLE_DREAM: gradient = "linear-gradient(to right, #8b5cf6, #7c3aed)"; break;
+            case ORANGE_SUNSET: gradient = "linear-gradient(to right, #f97316, #ea580c)"; break;
+            case PINK_BLOSSOM: gradient = "linear-gradient(to right, #ec4899, #db2777)"; break;
+            default: gradient = "linear-gradient(to right, #667eea, #764ba2)";
         }
-        button.setStyle(style + " -fx-background-radius: 8; -fx-padding: 10 20; -fx-font-weight: bold; -fx-cursor: hand;");
+
+        String textColor = (theme == Theme.CYBERPUNK) ? "black" : "white";
+        // 如果是图标按钮（createIconButton创建的），使用浅色背景
+        if (button.getStyle().contains("-fx-border-color")) {
+            // 保持 createIconButton 的逻辑，或者在这里统一覆盖
+            // 为了保持 new ui 的逻辑，这里我们只覆盖普通的长按钮（如“应用”、“批量处理”）
+            if (button.getPrefWidth() == Double.MAX_VALUE || button.getText().contains("打开") || button.getText().contains("保存")) {
+                button.setStyle("-fx-background-color: " + gradient + "; -fx-text-fill: " + textColor + "; -fx-background-radius: 6; -fx-font-weight: bold; -fx-cursor: hand; -fx-padding: 8 15;");
+            }
+        } else {
+            // 普通功能按钮
+            button.setStyle("-fx-background-color: " + gradient + "; -fx-text-fill: " + textColor + "; -fx-background-radius: 6; -fx-font-weight: bold; -fx-cursor: hand; -fx-padding: 8 15;");
+        }
     }
 
     /**
@@ -488,50 +546,51 @@ public class ModernImageEditor extends Application {
      * 启动画面
      */
     private void showSplashScreen(Runnable onComplete) {
-        // ... 现有代码保持不变 ...
         Stage splashStage = new Stage();
-
-        VBox splashRoot = new VBox(30);
+        // 构建启动页根容器
+        VBox splashRoot = new VBox(25);
         splashRoot.setAlignment(Pos.CENTER);
         splashRoot.setPrefSize(500, 350);
+        // 设置渐变背景
         splashRoot.setStyle("-fx-background-color: linear-gradient(from 0% 0% to 100% 100%, #667eea 0%, #764ba2 100%);");
 
+        // Logo 圆圈设计
         Circle logoCircle = new Circle(50);
         logoCircle.setFill(Color.WHITE);
         logoCircle.setEffect(new DropShadow(30, Color.rgb(0, 0, 0, 0.3)));
-
-        Label logoIcon = new Label("🎨");
+        Label logoIcon = new Label(" 🎨 ");
         logoIcon.setStyle("-fx-font-size: 60px;");
-
         StackPane logoPane = new StackPane(logoCircle, logoIcon);
 
+        // 标题与副标题
         Label titleLabel = new Label("AI Image Editor Pro");
-        titleLabel.setStyle("-fx-font-size: 32px; -fx-font-weight: bold; -fx-text-fill: white;");
-
+        titleLabel.setStyle("-fx-font-size: 32px; -fx-font-weight: bold; -fx-text-fill: white; -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.3), 5, 0, 0, 1);");
         Label subtitleLabel = new Label("Professional Image Processing Suite");
-        subtitleLabel.setStyle("-fx-font-size: 14px; -fx-text-fill: rgba(255,255,255,0.8);");
+        subtitleLabel.setStyle("-fx-font-size: 14px; -fx-text-fill: rgba(255,255,255,0.9);");
 
+        // 进度条
         ProgressBar progressBar = new ProgressBar();
         progressBar.setPrefWidth(300);
-        progressBar.setStyle("-fx-accent: white;");
-
-        Label loadingLabel = new Label("Loading...");
+        progressBar.setStyle("-fx-accent: #00f260; -fx-control-inner-background: rgba(255,255,255,0.3);");
+        Label loadingLabel = new Label("正在初始化引擎...");
         loadingLabel.setStyle("-fx-text-fill: white; -fx-font-size: 12px;");
 
         splashRoot.getChildren().addAll(logoPane, titleLabel, subtitleLabel, progressBar, loadingLabel);
-
         Scene splashScene = new Scene(splashRoot);
         splashStage.setScene(splashScene);
+        splashStage.initStyle(javafx.stage.StageStyle.TRANSPARENT); // 无边框
         splashStage.setAlwaysOnTop(true);
         splashStage.show();
 
+        // 入场淡入动画
         FadeTransition fadeIn = new FadeTransition(Duration.millis(800), splashRoot);
         fadeIn.setFromValue(0);
         fadeIn.setToValue(1);
         fadeIn.play();
 
+        // 模拟加载延时
         Timeline timeline = new Timeline(
-                new KeyFrame(Duration.seconds(2.5), e -> {
+                new KeyFrame(Duration.seconds(2.0), e -> {
                     FadeTransition fadeOut = new FadeTransition(Duration.millis(500), splashRoot);
                     fadeOut.setFromValue(1);
                     fadeOut.setToValue(0);
@@ -567,7 +626,8 @@ public class ModernImageEditor extends Application {
         root.setBottom(createBottomBar());
 
         // 创建场景
-        mainScene = new Scene(root, 1600, 900);
+        StackPane rootContainer = new StackPane(root);
+        mainScene = new Scene(rootContainer, 1600, 950);
         primaryStage.setScene(mainScene);
 
         // 应用默认主题
@@ -735,209 +795,302 @@ public class ModernImageEditor extends Application {
 
     // 修改 createTopBar() 方法
     private HBox createTopBar() {
-        HBox topBar = new HBox(15);
-        topBar.setPadding(new Insets(15, 20, 15, 20));
+        HBox topBar = new HBox(20); // 增加整体间距
+        topBar.getStyleClass().add("top-bar"); // 应用磨砂玻璃样式
         topBar.setAlignment(Pos.CENTER_LEFT);
+        topBar.setPadding(new Insets(15, 25, 15, 25)); // 调整内边距让 Logo 更舒展
 
-        // Logo和标题
-        Label logo = new Label("🎨");
-        logo.setStyle("-fx-font-size: 28px;");
+        // --- 1.全新的美化 Logo 区域 ---
+        HBox logoBox = new HBox(8);
+        logoBox.setAlignment(Pos.CENTER_LEFT);
 
-        Label title = new Label("AI Image Editor");
-        title.setStyle("-fx-font-size: 20px; -fx-font-weight: bold;");
+        // Logo 图标 (使用 Emoji 或字体图标，加上华丽的光晕特效)
+        Label logoIcon = new Label("✨");
+        logoIcon.setStyle(
+                "-fx-font-size: 28px; " +
+                        "-fx-text-fill: linear-gradient(to bottom right, #667eea, #764ba2); " + // 渐变色图标
+                        "-fx-effect: dropshadow(gaussian, rgba(102, 126, 234, 0.4), 8, 0, 0, 1);" // 柔和发光
+        );
 
-        Region spacer1 = new Region();
-        HBox.setHgrow(spacer1, Priority.ALWAYS);
+        // 主标题文字 (Pro Image Editor)
+        Label appTitle = new Label("Pro Image Editor");
+        appTitle.setStyle(
+                "-fx-font-family: 'Segoe UI Black', 'Microsoft YaHei Bold', sans-serif; " + // 使用更粗的字体
+                        "-fx-font-size: 22px; " +
+                        "-fx-text-fill: #2d3748; " + // 深灰蓝色，显得专业
+                        // 给文字加一点点白边，确保在任何背景下都清晰
+                        "-fx-effect: dropshadow(gaussian, rgba(255,255,255,0.8), 1, 0, 0, 0);"
+        );
 
-        // 文件操作按钮
-        Button openBtn = new Button("📁 打开");
-        openBtn.setOnAction(e -> openImage());
+        logoBox.getChildren().addAll(logoIcon, appTitle);
 
-        Button saveBtn = new Button("💾 保存");
-        saveBtn.setOnAction(e -> saveImage());
+        // --- 2. 中间占位符 ---
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
 
-        // 主题选择器
-        MenuButton themeMenu = new MenuButton("🎨 主题");
-        themeMenu.setStyle("-fx-background-color: rgba(0,0,0,0.05); " +
-                "-fx-background-radius: 8; " +
-                "-fx-padding: 8 12; " +
-                "-fx-cursor: hand;");
+        // --- 3. 右侧功能按钮区域 ---
+        HBox rightActions = new HBox(15);
+        rightActions.setAlignment(Pos.CENTER_RIGHT);
 
-        for (Theme theme : Theme.values()) {
-            MenuItem item = new MenuItem(theme.getDisplayName());
-            item.setOnAction(e -> applyTheme(theme));
-            themeMenu.getItems().add(item);
-        }
-
-        // 编辑操作按钮
-        Button undoBtn = createIconButton("↶", "撤销");
+        // 历史记录控制
+        Button undoBtn = createIconButton("↩️", "撤销 (Ctrl+Z)");
         undoBtn.setOnAction(e -> undo());
-
-        Button redoBtn = createIconButton("↷", "重做");
+        Button redoBtn = createIconButton("↪️", "重做 (Ctrl+Y)");
         redoBtn.setOnAction(e -> redo());
 
-        // 帮助按钮
-        Button helpBtn = createIconButton("❓", "帮助");
+        // 文件操作
+        Button openBtn = createIconButton("📂", "打开图片 (Ctrl+O)");
+        openBtn.setOnAction(e -> openImage());
+
+        // 保存按钮 (稍微强调一下)
+        Button saveBtn = new Button("💾 保存");
+        // 借用一下 CSS 里的样式类，或者直接写个强调样式
+        saveBtn.setStyle("-fx-background-color: linear-gradient(to right, #667eea, #764ba2); -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 20; -fx-padding: 6 15; -fx-cursor: hand;");
+        saveBtn.setOnAction(e -> saveImage());
+
+        // 其他功能
+        Button themeBtn = createIconButton("🌗", "切换主题 (Ctrl+T)");
+        themeBtn.setOnAction(e -> showThemeSelectionDialog());
+        Button helpBtn = createIconButton("❓", "帮助与关于");
         helpBtn.setOnAction(e -> showHelp());
 
-        topBar.getChildren().addAll(logo, title, spacer1, openBtn, saveBtn, themeMenu,
-                new Separator(), undoBtn, redoBtn, helpBtn);
+        // 应用 CSS 样式类到这些图标按钮，让它们变成圆形的
+        undoBtn.getStyleClass().add("icon-action-btn");
+        redoBtn.getStyleClass().add("icon-action-btn");
+        openBtn.getStyleClass().add("icon-action-btn");
+        themeBtn.getStyleClass().add("icon-action-btn");
+        helpBtn.getStyleClass().add("icon-action-btn");
+
+        rightActions.getChildren().addAll(undoBtn, redoBtn, new Separator(Orientation.VERTICAL), openBtn, saveBtn, new Separator(Orientation.VERTICAL), themeBtn, helpBtn);
+
+        // 组装顶部栏
+        topBar.getChildren().addAll(logoBox, spacer, rightActions);
 
         return topBar;
     }
 
-    // 修改 createLeftPanel() 方法，在AI功能部分添加豆包图生图按钮
+    private void showThemeSelectionDialog() {
+        Dialog<Void> dialog = new Dialog<>();
+        dialog.setTitle("主题工坊");
+        try { if (mainScene != null) dialog.getDialogPane().getStylesheets().addAll(mainScene.getStylesheets()); } catch (Exception e) {}
+
+        // 1. 头部设计
+        VBox header = new VBox(5);
+        header.setAlignment(Pos.CENTER);
+        header.setPadding(new Insets(0, 0, 20, 0));
+        Label icon = new Label("🎨");
+        icon.setStyle("-fx-font-size: 40px; -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.2), 5, 0, 0, 2);");
+        Label title = new Label("界面风格");
+        title.setStyle("-fx-font-size: 18px; -fx-font-weight: bold; -fx-text-fill: #111827;");
+        Label subtitle = new Label("选择最适合你心情的配色方案");
+        subtitle.setStyle("-fx-font-size: 12px; -fx-text-fill: #6b7280;");
+        header.getChildren().addAll(icon, title, subtitle);
+
+        // 2. 主题网格列表
+        GridPane grid = new GridPane();
+        grid.setHgap(15);
+        grid.setVgap(15);
+        grid.setPadding(new Insets(10));
+        grid.setAlignment(Pos.CENTER);
+
+        Theme[] themes = Theme.values();
+        for (int i = 0; i < themes.length; i++) {
+            Theme theme = themes[i];
+            Node card = createThemeCard(theme, () -> {
+                applyTheme(theme);
+                dialog.close(); // 选择后关闭弹窗
+            });
+            grid.add(card, i % 2, i / 2); // 每行显示2个
+        }
+
+        // 包装在一个滚动容器里，防止主题太多显示不下
+        ScrollPane scroll = new ScrollPane(grid);
+        scroll.setFitToWidth(true);
+        scroll.setPrefHeight(320); // 限制高度
+        scroll.setStyle("-fx-background-color: transparent; -fx-background: transparent;");
+        // 隐藏滚动条背景
+        scroll.getStyleClass().add("edge-to-edge");
+
+        VBox content = new VBox(15);
+        content.setPadding(new Insets(25));
+        content.setPrefWidth(400);
+        content.getChildren().addAll(header, scroll);
+
+        dialog.getDialogPane().setContent(content);
+
+        // 关闭按钮
+        dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
+        Node closeBtn = dialog.getDialogPane().lookupButton(ButtonType.CLOSE);
+        closeBtn.setVisible(false); closeBtn.setManaged(false);
+
+        dialog.showAndWait();
+    }
+
     /**
-     * 创建左侧工具面板 - 增强交互功能
+     * [辅助] 创建单个主题预览卡片
      */
+    private Node createThemeCard(Theme theme, Runnable onSelect) {
+        HBox card = new HBox(15);
+        card.setAlignment(Pos.CENTER_LEFT);
+        card.setPadding(new Insets(12));
+        card.setPrefWidth(160);
+        // 默认样式
+        String normalStyle = "-fx-background-color: #f9fafb; -fx-background-radius: 12; -fx-border-color: #e5e7eb; -fx-border-radius: 12; -fx-cursor: hand;";
+        String hoverStyle = "-fx-background-color: white; -fx-background-radius: 12; -fx-border-color: #667eea; -fx-border-radius: 12; -fx-cursor: hand; -fx-effect: dropshadow(three-pass-box, rgba(102,126,234,0.2), 10, 0, 0, 0);";
+
+        card.setStyle(normalStyle);
+
+        // 颜色预览圆点 (获取该主题的代表色)
+        HBox colors = new HBox(-5); // 负间距实现重叠效果
+        Color[] themeColors = getThemeColors(theme); // 确保你类里有 getThemeColors 方法
+        for (Color c : themeColors) {
+            Circle circle = new Circle(8, c);
+            circle.setStroke(Color.WHITE);
+            circle.setStrokeWidth(2);
+            colors.getChildren().add(circle);
+        }
+
+        Label name = new Label(theme.getDisplayName());
+        name.setStyle("-fx-font-weight: bold; -fx-text-fill: #374151; -fx-font-size: 13px;");
+
+        card.getChildren().addAll(colors, name);
+
+        // 交互事件
+        card.setOnMouseEntered(e -> card.setStyle(hoverStyle));
+        card.setOnMouseExited(e -> card.setStyle(normalStyle));
+        card.setOnMouseClicked(e -> onSelect.run());
+
+        return card;
+    }
+
     private ScrollPane createLeftPanel() {
-        leftPanel = new VBox(20);
-        leftPanel.setPadding(new Insets(20));
-        leftPanel.setPrefWidth(280);
+        VBox content = new VBox(20); // 增加间距
+        content.setPadding(new Insets(20));
+        content.setPrefWidth(300); //稍微加宽一点
 
-        // 基础调整
-        Label basicLabel = createSectionLabel("🎛 基础调整");
+        // 1. 基础调整卡片
         VBox adjustmentPanel = createAdvancedAdjustmentPanel();
+        // 注意：createAdvancedAdjustmentPanel 内部原本有 title，建议修改该方法去掉内部的 title，或者在这里忽略
+        VBox basicCard = createCard("🎛  基础调整", adjustmentPanel);
 
-        Separator sep1 = new Separator();
-
-        // 交互工具选择
-        Label toolsLabel = createSectionLabel("🛠️ 交互工具");
-
-        // 工具选择按钮组
+        // 2. 交互工具卡片
         ToggleGroup toolGroup = new ToggleGroup();
 
-        ToggleButton selectTool = new ToggleButton("👆 选择");
-        selectTool.setToggleGroup(toolGroup);
-        selectTool.setSelected(true);
-        selectTool.setOnAction(e -> setToolMode(ToolMode.SELECT));
+        // 使用网格布局让工具按钮更整齐
+        GridPane toolGrid = new GridPane();
+        toolGrid.setHgap(10);
+        toolGrid.setVgap(10);
 
-        ToggleButton cropTool = new ToggleButton("✂️ 裁剪");
-        cropTool.setToggleGroup(toolGroup);
-        cropTool.setOnAction(e -> setToolMode(ToolMode.CROP));
+        ToggleButton selectTool = createToolButton("👆 选择", ToolMode.SELECT, toolGroup);
+        ToggleButton cropTool = createToolButton("✂️ 裁剪", ToolMode.CROP, toolGroup);
+        ToggleButton brushTool = createToolButton("🖌️ 画笔", ToolMode.DRAW_BRUSH, toolGroup);
+        ToggleButton textTool = createToolButton("A  文字", ToolMode.DRAW_TEXT, toolGroup);
+        ToggleButton rectTool = createToolButton("⬜ 矩形", ToolMode.DRAW_RECT, toolGroup);
+        ToggleButton circleTool = createToolButton("⭕ 圆形", ToolMode.DRAW_CIRCLE, toolGroup);
 
-        ToggleButton brushTool = new ToggleButton("🖌️ 画笔");
-        brushTool.setToggleGroup(toolGroup);
-        brushTool.setOnAction(e -> setToolMode(ToolMode.DRAW_BRUSH));
+        toolGrid.add(selectTool, 0, 0); toolGrid.add(cropTool, 1, 0);
+        toolGrid.add(brushTool, 0, 1);  toolGrid.add(textTool, 1, 1);
+        toolGrid.add(rectTool, 0, 2);   toolGrid.add(circleTool, 1, 2);
 
-        ToggleButton textTool = new ToggleButton("A 文字");
-        textTool.setToggleGroup(toolGroup);
-        textTool.setOnAction(e -> setToolMode(ToolMode.DRAW_TEXT));
-
-        ToggleButton rectTool = new ToggleButton("⬜ 矩形");
-        rectTool.setToggleGroup(toolGroup);
-        rectTool.setOnAction(e -> setToolMode(ToolMode.DRAW_RECT));
-
-        ToggleButton circleTool = new ToggleButton("⭕ 圆形");
-        circleTool.setToggleGroup(toolGroup);
-        circleTool.setOnAction(e -> setToolMode(ToolMode.DRAW_CIRCLE));
-
-        FlowPane toolButtons = new FlowPane(10, 10);
-        toolButtons.setAlignment(Pos.CENTER_LEFT);
-        toolButtons.getChildren().addAll(selectTool, cropTool, brushTool, textTool, rectTool, circleTool);
-
-        Separator sep2 = new Separator();
-
-        // 绘图工具设置面板
+        // 绘图设置面板 (默认隐藏)
         VBox drawingSettings = createDrawingSettingsPanel();
-        drawingSettings.setVisible(false); // 默认隐藏
-
-        // 监听工具切换，显示/隐藏设置面板
+        drawingSettings.setVisible(false);
         toolGroup.selectedToggleProperty().addListener((obs, oldVal, newVal) -> {
-            boolean isDrawingTool = newVal == brushTool || newVal == rectTool || newVal == circleTool;
+            boolean isDrawingTool = newVal == brushTool || newVal == rectTool || newVal == circleTool || newVal == textTool;
             drawingSettings.setVisible(isDrawingTool);
+            // 动态调整布局，避免留白
+            if (!isDrawingTool) {
+                drawingSettings.setManaged(false);
+            } else {
+                drawingSettings.setManaged(true);
+            }
         });
+        drawingSettings.setManaged(false); // 初始状态不占位
 
-        Separator sep3 = new Separator();
+        VBox toolsCard = createCard("🛠️  交互工具", toolGrid, drawingSettings);
 
-        // 批量处理
-        Label batchLabel = createSectionLabel("🔄 批量处理");
+        // 3. 变换与批量卡片
+        // 变换按钮
+        GridPane transGrid = new GridPane();
+        transGrid.setHgap(10); transGrid.setVgap(10);
+        transGrid.add(createOperationButton("⟳ 90°", e->rotate90()), 0, 0);
+        transGrid.add(createOperationButton("⟳ 180°", e->rotate180()), 1, 0);
+        transGrid.add(createOperationButton("⇄ 水平", e->flipHorizontal()), 0, 1);
+        transGrid.add(createOperationButton("⇅ 垂直", e->flipVertical()), 1, 1);
+
+        // 批量按钮
         Button batchBtn = new Button("批量处理图片");
         batchBtn.setPrefWidth(Double.MAX_VALUE);
         batchBtn.setOnAction(e -> startBatchProcessing());
+        // 给批量按钮特殊样式（稍微显眼点）
+        batchBtn.setStyle("-fx-background-color: linear-gradient(to right, #4facfe, #00f2fe); -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6; -fx-cursor: hand;");
 
-        Separator sep4 = new Separator();
+        VBox transCard = createCard("🔄  变换 & 批量", transGrid, new Separator(), batchBtn);
 
-        // 变换操作
-        Label transformLabel = createSectionLabel("🔄 变换");
-        FlowPane transformButtons = new FlowPane(10, 10);
-        transformButtons.setAlignment(Pos.CENTER_LEFT);
+        // 4. 滤镜卡片
+        VBox blurControl = createSliderControl("模糊程度", 0, 10, 0, this::applyBlur);
+        Button grayscaleBtn = createOperationButton("⚫  灰度化", e->applyGrayscale());
+        Button edgeDetectBtn = createOperationButton("🔲  边缘检测", e->detectEdges());
 
-        Button rotate90 = createOperationButton("⟳ 90°");
-        rotate90.setOnAction(e -> rotate90());
+        // 将按钮横向排列节省空间
+        HBox filterBtns = new HBox(10, grayscaleBtn, edgeDetectBtn);
+        HBox.setHgrow(grayscaleBtn, Priority.ALWAYS);
+        HBox.setHgrow(edgeDetectBtn, Priority.ALWAYS);
+        grayscaleBtn.setMaxWidth(Double.MAX_VALUE);
+        edgeDetectBtn.setMaxWidth(Double.MAX_VALUE);
 
-        Button rotate180 = createOperationButton("⟳ 180°");
-        rotate180.setOnAction(e -> rotate180());
+        VBox filterCard = createCard("✨  滤镜特效", blurControl, filterBtns);
 
-        Button flipH = createOperationButton("⇄ 水平");
-        flipH.setOnAction(e -> flipHorizontal());
+        // 5. AI 增强卡片
+        Button aiEnhanceBtn = createAIButton("✨  AI 智能增强", e->aiEnhance(), "#845ec2");
+        Button removeBgBtn = createAIButton("🖼  一键移除背景", e->removeBackground(), "#ff9671");
+        Button styleBtn = createAIButton("🎨  艺术风格迁移", e->applyArtisticStyle(), "#ffc75f");
 
-        Button flipV = createOperationButton("⇅ 垂直");
-        flipV.setOnAction(e -> flipVertical());
+        VBox aiCard = createCard("🤖  AI 实验室", aiEnhanceBtn, removeBgBtn, styleBtn);
 
-        transformButtons.getChildren().addAll(rotate90, rotate180, flipH, flipV);
-
-        Separator sep5 = new Separator();
-
-        // 滤镜效果
-        Label filterLabel = createSectionLabel("✨ 滤镜");
-
-        VBox blurControl = createSliderControl("模糊", 0, 10, 0, value -> {
-            applyBlur(value);
-        });
-
-        Button grayscaleBtn = createOperationButton("⚫ 灰度");
-        grayscaleBtn.setPrefWidth(Double.MAX_VALUE);
-        grayscaleBtn.setOnAction(e -> applyGrayscale());
-
-        Button edgeDetectBtn = createOperationButton("🔲 边缘检测");
-        edgeDetectBtn.setPrefWidth(Double.MAX_VALUE);
-        edgeDetectBtn.setOnAction(e -> detectEdges());
-
-        Separator sep6 = new Separator();
-
-        // AI功能 - 添加豆包图生图按钮
-        Label aiLabel = createSectionLabel("🤖 AI增强");
-
-        Button aiEnhanceBtn = new Button("✨ AI增强");
-        aiEnhanceBtn.setPrefWidth(Double.MAX_VALUE);
-        aiEnhanceBtn.setOnAction(e -> aiEnhance());
-
-        Button removeBackground = new Button("🖼 移除背景");
-        removeBackground.setPrefWidth(Double.MAX_VALUE);
-        removeBackground.setOnAction(e -> removeBackground());
-
-        Button artisticStyle = new Button("🎨 艺术风格");
-        artisticStyle.setPrefWidth(Double.MAX_VALUE);
-        artisticStyle.setOnAction(e -> applyArtisticStyle());
-
-        // 豆包图生图按钮（仅在配置可用时显示）
-        Button arkImageGenBtn = null;
+        // 豆包 AI
         if (arkAvailable) {
-            arkImageGenBtn = new Button("🖼 豆包图生图");
-            arkImageGenBtn.setPrefWidth(Double.MAX_VALUE);
-            arkImageGenBtn.setOnAction(e -> showArkImageGenerationDialog());
+            Button arkBtn = createAIButton("🌌  豆包图生图", e->showArkImageGenerationDialog(), "#0081cf");
+            aiCard.getChildren().add(arkBtn);
         }
 
-        leftPanel.getChildren().addAll(
-                basicLabel, adjustmentPanel,
-                sep1, toolsLabel, toolButtons, drawingSettings,
-                sep2, batchLabel, batchBtn,
-                sep3, transformLabel, transformButtons,
-                sep4, filterLabel, blurControl, grayscaleBtn, edgeDetectBtn,
-                sep5, aiLabel, aiEnhanceBtn, removeBackground, artisticStyle
-        );
+        // 将所有卡片添加到左侧面板
+        content.getChildren().addAll(basicCard, toolsCard, transCard, filterCard, aiCard);
 
-        // 添加豆包图生图按钮（如果可用）
-        if (arkImageGenBtn != null) {
-            leftPanel.getChildren().add(arkImageGenBtn);
-        }
-
-        ScrollPane scrollPane = new ScrollPane(leftPanel);
+        leftPanel = content; // 更新成员变量
+        ScrollPane scrollPane = new ScrollPane(content);
         scrollPane.setFitToWidth(true);
-        scrollPane.setStyle("-fx-background-color: transparent;");
-
+        // 隐藏滚动条背景，使其更自然
+        scrollPane.setStyle("-fx-background-color: transparent; -fx-background: transparent;");
         return scrollPane;
+    }
+
+    // [新增辅助] 创建工具栏 ToggleButton
+    private ToggleButton createToolButton(String text, ToolMode mode, ToggleGroup group) {
+        ToggleButton btn = new ToggleButton(text);
+        btn.setToggleGroup(group);
+        btn.setPrefWidth(110); // 固定宽度让网格整齐
+        btn.setOnAction(e -> setToolMode(mode));
+        if (mode == ToolMode.SELECT) btn.setSelected(true);
+        return btn;
+    }
+
+    // [新增辅助] 创建普通操作按钮的简写
+    private Button createOperationButton(String text, javafx.event.EventHandler<javafx.event.ActionEvent> action) {
+        Button btn = createOperationButton(text); // 调用原有的样式方法
+        btn.setOnAction(action);
+        btn.setMaxWidth(Double.MAX_VALUE); // 自动填满
+        return btn;
+    }
+
+    // [新增辅助] 创建 AI 专用多彩按钮
+    private Button createAIButton(String text, javafx.event.EventHandler<javafx.event.ActionEvent> action, String colorHex) {
+        Button btn = new Button(text);
+        btn.setMaxWidth(Double.MAX_VALUE);
+        btn.setOnAction(action);
+        // 默认样式，会被 Theme 覆盖，但我们可以给 AI 按钮保留一点特殊色
+        btn.setStyle("-fx-background-color: " + colorHex + "; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 6; -fx-cursor: hand; -fx-padding: 10;");
+        return btn;
     }
 
     /**
@@ -945,181 +1098,176 @@ public class ModernImageEditor extends Application {
      */
     private void showArkImageGenerationDialog() {
         if (!arkAvailable) {
-            showError("功能不可用", "豆包图生图配置不可用，请检查config.properties文件");
+            showError("功能未就绪", "请检查 config.properties 配置");
             return;
         }
-
         if (currentImageFile == null) {
-            showError("错误", "请先加载一张图片作为原图");
+            showError("提示", "请先在主界面加载一张参考图片");
             return;
         }
 
+        // 1. 创建对话框
         Dialog<Void> dialog = new Dialog<>();
-        dialog.setTitle("豆包图生图");
-        dialog.setHeaderText("基于当前图片进行AI图生图创作");
+        dialog.setTitle("豆包图生图 - AI 创作中心");
 
-        // 创建对话框内容
-        VBox content = new VBox(15);
-        content.setPadding(new Insets(20));
-        content.setPrefWidth(500);
-
-        // 原图信息
-        HBox sourceInfo = new HBox(10);
-        sourceInfo.setAlignment(Pos.CENTER_LEFT);
-
-        Label sourceLabel = new Label("原图:");
-        sourceLabel.setStyle("-fx-font-weight: bold;");
-
-        String sourceText = currentImageFile.getName();
-        Label sourceFileLabel = new Label(sourceText);
-        sourceFileLabel.setStyle("-fx-font-size: 12px; -fx-text-fill: #666;");
-
-        sourceInfo.getChildren().addAll(sourceLabel, sourceFileLabel);
-
-        // 提示词输入
-        Label promptLabel = new Label("创作指令:");
-        promptLabel.setStyle("-fx-font-weight: bold;");
-
-        TextArea promptArea = new TextArea();
-        promptArea.setPromptText("请输入图生图创作指令，例如：添加星空背景、转换为卡通风格等...");
-        promptArea.setWrapText(true);
-        promptArea.setPrefRowCount(3);
-        promptArea.setPrefColumnCount(40);
-
-        // 输出设置
-        VBox outputSettings = new VBox(10);
-        outputSettings.setStyle("-fx-background-color: #f5f5f5; -fx-background-radius: 8; -fx-padding: 15;");
-
-        Label outputLabel = new Label("输出设置:");
-        outputLabel.setStyle("-fx-font-weight: bold; -fx-font-size: 14px;");
-
-        // 保存目录
-        HBox saveDirBox = new HBox(10);
-        saveDirBox.setAlignment(Pos.CENTER_LEFT);
-
-        Label dirLabel = new Label("保存目录:");
-        TextField dirField = new TextField("D:/generated_images/");
-        dirField.setPrefWidth(300);
-
-        Button browseDirBtn = new Button("浏览");
-        browseDirBtn.setOnAction(e -> {
-            DirectoryChooser dirChooser = new DirectoryChooser();
-            dirChooser.setTitle("选择保存目录");
-            File selectedDir = dirChooser.showDialog(primaryStage);
-            if (selectedDir != null) {
-                dirField.setText(selectedDir.getAbsolutePath());
+        // [关键] 获取主场景的样式表，应用到弹窗
+        try {
+            if (mainScene != null) {
+                dialog.getDialogPane().getStylesheets().addAll(mainScene.getStylesheets());
             }
+        } catch (Exception e) { e.printStackTrace(); }
+
+        // 2. 自定义头部 (替代默认 Header)
+        VBox headerBox = new VBox(5);
+        headerBox.setAlignment(Pos.CENTER);
+        headerBox.setPadding(new Insets(0, 0, 15, 0));
+        Label iconLbl = new Label("🎨");
+        iconLbl.setStyle("-fx-font-size: 40px; -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.2), 5, 0, 0, 2);");
+        Label titleLbl = new Label("AI 灵感创作");
+        titleLbl.setStyle("-fx-font-size: 18px; -fx-font-weight: bold; -fx-text-fill: #111827;");
+        Label subTitleLbl = new Label("基于 " + currentImageFile.getName() + " 进行再创作");
+        subTitleLbl.setStyle("-fx-font-size: 12px; -fx-text-fill: #6b7280;");
+        headerBox.getChildren().addAll(iconLbl, titleLbl, subTitleLbl);
+
+        // 3. 提示词输入区域
+        VBox promptBox = new VBox(8);
+        Label pLabel = new Label("✨ 你的创意指令:");
+        pLabel.setStyle("-fx-font-weight: bold; -fx-text-fill: #374151;");
+
+        TextArea pArea = new TextArea();
+        pArea.setPromptText("例如：把背景变成赛博朋克风格的街道，添加霓虹灯光效，保持主体清晰...");
+        pArea.setWrapText(true);
+        pArea.setPrefRowCount(3);
+        pArea.setPrefHeight(80);
+        promptBox.getChildren().addAll(pLabel, pArea);
+
+        // 4. 输出设置区域 (使用 GridPane 对齐)
+        GridPane settingsGrid = new GridPane();
+        settingsGrid.setHgap(10); settingsGrid.setVgap(10);
+        settingsGrid.setPadding(new Insets(15));
+        // 给设置区域加个浅色背景框
+        settingsGrid.setStyle("-fx-background-color: #f9fafb; -fx-background-radius: 8; -fx-border-color: #e5e7eb; -fx-border-radius: 8;");
+
+        Label dirLabel = new Label("保存位置:");
+        dirLabel.setStyle("-fx-text-fill: #4b5563; -fx-font-size: 12px;");
+        TextField dirField = new TextField("D:/generated_images/");
+        Button browseBtn = new Button("📂 浏览");
+        browseBtn.getStyleClass().add("small-action"); // 应用 CSS 小按钮样式
+        browseBtn.setOnAction(e -> {
+            DirectoryChooser dc = new DirectoryChooser();
+            File f = dc.showDialog(null);
+            if(f != null) dirField.setText(f.getAbsolutePath());
         });
 
-        saveDirBox.getChildren().addAll(dirLabel, dirField, browseDirBtn);
+        Label nameLabel = new Label("文件命名:");
+        nameLabel.setStyle("-fx-text-fill: #4b5563; -fx-font-size: 12px;");
+        TextField nameField = new TextField("ai_art_" + System.currentTimeMillis());
 
-        // 文件名
-        HBox fileNameBox = new HBox(10);
-        fileNameBox.setAlignment(Pos.CENTER_LEFT);
+        settingsGrid.add(dirLabel, 0, 0);
+        settingsGrid.add(dirField, 1, 0);
+        settingsGrid.add(browseBtn, 2, 0);
+        settingsGrid.add(nameLabel, 0, 1);
+        settingsGrid.add(nameField, 1, 1);
 
-        Label nameLabel = new Label("文件名:");
-        TextField nameField = new TextField("generated_image");
-        nameField.setPrefWidth(200);
+        // 让输入框自动拉伸
+        GridPane.setHgrow(dirField, Priority.ALWAYS);
+        GridPane.setHgrow(nameField, Priority.ALWAYS);
 
-        fileNameBox.getChildren().addAll(nameLabel, nameField);
+        // 5. 状态与进度
+        VBox statusBox = new VBox(5);
+        Label statusLabel = new Label("准备就绪");
+        statusLabel.setStyle("-fx-text-fill: #6b7280; -fx-font-size: 12px;");
+        statusLabel.setMaxWidth(Double.MAX_VALUE);
+        statusLabel.setAlignment(Pos.CENTER);
 
-        outputSettings.getChildren().addAll(outputLabel, saveDirBox, fileNameBox);
+        ProgressBar pBar = new ProgressBar();
+        pBar.setVisible(false);
+        pBar.setMaxWidth(Double.MAX_VALUE);
+        statusBox.getChildren().addAll(statusLabel, pBar);
 
-        // 状态信息
-        Label statusLabel = new Label();
-        statusLabel.setStyle("-fx-font-size: 12px; -fx-text-fill: #666;");
+        // 6. 生成按钮
+        Button genBtn = new Button("🚀  立即生成");
+        genBtn.setMaxWidth(Double.MAX_VALUE);
+        genBtn.setPrefHeight(40);
+        genBtn.setStyle("-fx-font-size: 14px;"); // 基础样式由 CSS .button 控制
 
-        // 进度条
-        ProgressBar progressBar = new ProgressBar();
-        progressBar.setVisible(false);
-        progressBar.setPrefWidth(400);
+        // 组装主内容
+        VBox content = new VBox(20);
+        content.setPadding(new Insets(25));
+        content.setPrefWidth(480);
+        content.getChildren().addAll(headerBox, promptBox, settingsGrid, statusBox, genBtn);
 
-        content.getChildren().addAll(sourceInfo, promptLabel, promptArea, outputSettings, statusLabel, progressBar);
+        dialog.getDialogPane().setContent(content);
+        // 添加关闭按钮类型 (虽然我们主要用自定义界面，但需要这个来支持右上角X)
+        dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
+        // 隐藏默认的底部按钮栏，因为我们自己画了按钮
+        Node closeButton = dialog.getDialogPane().lookupButton(ButtonType.CLOSE);
+        closeButton.setVisible(false);
+        closeButton.setManaged(false);
 
-        // 对话框按钮
-        Button generateBtn = new Button("🖼 开始生成");
-        generateBtn.setStyle("-fx-background-color: #4CAF50; -fx-text-fill: white; -fx-font-weight: bold;");
-
-        Button cancelBtn = new Button("取消");
-        cancelBtn.setOnAction(e -> dialog.close());
-
-        HBox buttonBox = new HBox(15);
-        buttonBox.setAlignment(Pos.CENTER_RIGHT);
-        buttonBox.getChildren().addAll(cancelBtn, generateBtn);
-
-        content.getChildren().add(buttonBox);
-
-        // 生成按钮事件
-        generateBtn.setOnAction(e -> {
-            String prompt = promptArea.getText().trim();
-            if (prompt.isEmpty()) {
-                showError("错误", "请输入创作指令");
+        // 7. 生成逻辑
+        genBtn.setOnAction(e -> {
+            String prompt = pArea.getText().trim();
+            if(prompt.isEmpty()) {
+                pArea.setStyle("-fx-border-color: #ff5252;"); // 错误红框
+                pArea.setPromptText("⚠️ 请先输入提示词！");
                 return;
             }
 
-            String saveDir = dirField.getText().trim();
-            if (saveDir.isEmpty()) {
-                saveDir = "D:/generated_images/";
-            }
+            // 锁定界面
+            pArea.setDisable(true);
+            settingsGrid.setDisable(true);
+            genBtn.setDisable(true);
+            pBar.setVisible(true);
+            statusLabel.setText("✨ AI 正在绘图，请稍候 (约5-10秒)...");
+            statusLabel.setStyle("-fx-text-fill: #667eea; -fx-font-weight: bold;");
 
-            String fileName = nameField.getText().trim();
-            if (fileName.isEmpty()) {
-                fileName = "generated_image";
-            }
-
-            // 更新状态
-            statusLabel.setText("正在生成图片...");
-            progressBar.setVisible(true);
-            progressBar.setProgress(ProgressBar.INDETERMINATE_PROGRESS);
-            generateBtn.setDisable(true);
-
-            // 在UI线程中执行图生图（使用Platform.runLater确保UI响应）
-            String finalSaveDir = saveDir;
-            String finalFileName = fileName;
             new Thread(() -> {
                 try {
-                    // 调用豆包图生图功能
-                    String result = generateArkImage(
-                            currentImageFile.getAbsolutePath(),
-                            prompt,
-                            finalSaveDir,
-                            finalFileName
-                    );
+                    String saveDir = dirField.getText();
+                    String fileName = nameField.getText();
+                    // 调用生成接口
+                    String url = generateArkImage(currentImageFile.getAbsolutePath(), prompt, saveDir, fileName);
 
                     Platform.runLater(() -> {
-                        statusLabel.setText("图片生成成功！");
-                        progressBar.setVisible(false);
-                        generateBtn.setDisable(false);
+                        statusLabel.setText("✅ 生成成功！");
+                        pBar.setVisible(false);
 
-                        // 询问是否打开生成的图片
+                        // 显示成功弹窗 (这里也可以美化，暂且用 Alert)
                         Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
-                        alert.setTitle("生成成功");
-                        alert.setHeaderText("图片生成成功！");
-                        alert.setContentText("图片已保存到: " + result + "\n\n是否打开生成的图片？");
+                        alert.setTitle("创作完成");
+                        alert.setHeaderText("您的 AI 作品已生成");
+                        alert.setContentText("保存路径: " + url + "\n\n是否立即在编辑器中打开？");
+                        // 尝试给 Alert 也加样式
+                        try { alert.getDialogPane().getStylesheets().addAll(mainScene.getStylesheets()); } catch(Exception ex){}
 
-                        alert.showAndWait().ifPresent(response -> {
-                            if (response == ButtonType.OK) {
-                                File generatedFile = new File(result);
-                                if (generatedFile.exists()) {
-                                    loadImage(generatedFile);
-                                    dialog.close();
-                                }
+                        alert.showAndWait().ifPresent(r -> {
+                            if(r == ButtonType.OK) {
+                                loadImage(new File(url));
+                                dialog.close();
+                            } else {
+                                //如果不打开，解锁界面允许再次生成
+                                pArea.setDisable(false);
+                                settingsGrid.setDisable(false);
+                                genBtn.setDisable(false);
+                                genBtn.setText("🔄  再来一张");
+                                nameField.setText("ai_art_" + System.currentTimeMillis());
                             }
                         });
                     });
-                } catch (Exception ex) {
+                } catch(Exception ex) {
                     Platform.runLater(() -> {
-                        statusLabel.setText("生成失败: " + ex.getMessage());
-                        progressBar.setVisible(false);
-                        generateBtn.setDisable(false);
-                        showError("生成失败", ex.getMessage());
+                        statusLabel.setText("❌ 生成失败: " + ex.getMessage());
+                        statusLabel.setStyle("-fx-text-fill: #ff5252;");
+                        pBar.setVisible(false);
+                        genBtn.setDisable(false);
+                        pArea.setDisable(false);
+                        settingsGrid.setDisable(false);
                     });
                 }
             }).start();
         });
 
-        dialog.getDialogPane().setContent(content);
-        dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
         dialog.showAndWait();
     }
 
@@ -1595,56 +1743,82 @@ public class ModernImageEditor extends Application {
      */
     private void showBatchProcessingDialog(List<File> files) {
         Dialog<Void> dialog = new Dialog<>();
-        dialog.setTitle("批量处理");
-        dialog.setHeaderText("选择要应用的操作");
+        dialog.setTitle("批量工坊");
+        try { if (mainScene != null) dialog.getDialogPane().getStylesheets().addAll(mainScene.getStylesheets()); } catch (Exception e) {}
 
-        VBox content = new VBox(20);
-        content.setPadding(new Insets(20));
-        content.setPrefWidth(400);
+        // 头部
+        VBox header = new VBox(5);
+        header.setAlignment(Pos.CENTER);
+        header.setPadding(new Insets(0,0,20,0));
+        Label icon = new Label("🏭");
+        icon.setStyle("-fx-font-size: 40px;");
+        Label title = new Label("批量图像处理流水线");
+        title.setStyle("-fx-font-size: 18px; -fx-font-weight: bold; -fx-text-fill: #111827;");
+        Label subtitle = new Label("已就绪队列: " + files.size() + " 个文件");
+        subtitle.setStyle("-fx-text-fill: #667eea; -fx-font-weight: bold; -fx-background-color: #f0f4ff; -fx-padding: 4 10; -fx-background-radius: 12;");
+        header.getChildren().addAll(icon, title, subtitle);
 
-        Label infoLabel = new Label("已选择 " + files.size() + " 张图片");
-        infoLabel.setStyle("-fx-font-weight: bold;");
+        VBox content = new VBox(15);
+        content.setPadding(new Insets(25));
+        content.setPrefWidth(450);
 
-        // 选择操作类型
-        ComboBox<String> operationCombo = new ComboBox<>();
-        operationCombo.getItems().addAll("灰度化", "调整亮度", "调整对比度", "调整饱和度", "模糊", "边缘检测", "旋转90度");
-        operationCombo.setValue("灰度化");
+        // 1. 操作选择卡片
+        VBox opCard = new VBox(10);
+        opCard.setStyle("-fx-background-color: #f9fafb; -fx-padding: 15; -fx-background-radius: 8; -fx-border-color: #e5e7eb; -fx-border-radius: 8;");
+        Label opLabel = new Label("选择流水线操作:");
+        opLabel.setStyle("-fx-font-weight: bold; -fx-text-fill: #374151;");
 
-        // 参数控制
-        VBox paramBox = new VBox(10);
+        ComboBox<String> opCombo = new ComboBox<>();
+        opCombo.getItems().addAll("灰度化", "调整亮度", "调整对比度", "调整饱和度", "模糊", "边缘检测", "旋转90度");
+        opCombo.setValue("灰度化");
+        opCombo.setMaxWidth(Double.MAX_VALUE);
+
+        // 参数滑块 (默认隐藏)
+        VBox paramBox = new VBox(5);
         paramBox.setVisible(false);
-
+        paramBox.setManaged(false); // 不占位
+        Label paramLbl = new Label("强度参数:");
+        paramLbl.setStyle("-fx-font-size: 12px; -fx-text-fill: #6b7280;");
         Slider paramSlider = new Slider(-100, 100, 0);
-        paramSlider.setShowTickLabels(true);
-        paramSlider.setShowTickMarks(true);
+        paramBox.getChildren().addAll(paramLbl, paramSlider);
 
-        operationCombo.setOnAction(e -> {
-            paramBox.setVisible(!operationCombo.getValue().equals("灰度化") &&
-                    !operationCombo.getValue().equals("边缘检测") &&
-                    !operationCombo.getValue().equals("旋转90度"));
+        opCombo.setOnAction(e -> {
+            String val = opCombo.getValue();
+            boolean showSlider = val.contains("亮度") || val.contains("对比度") || val.contains("饱和度") || val.contains("模糊");
+            paramBox.setVisible(showSlider);
+            paramBox.setManaged(showSlider);
         });
 
-        paramBox.getChildren().addAll(new Label("参数值:"), paramSlider);
+        opCard.getChildren().addAll(opLabel, opCombo, paramBox);
 
-        // 输出设置
+        // 2. 输出设置卡片
+        VBox outCard = new VBox(10);
+        outCard.setStyle("-fx-background-color: #f9fafb; -fx-padding: 15; -fx-background-radius: 8; -fx-border-color: #e5e7eb; -fx-border-radius: 8;");
+        Label outLabel = new Label("输出命名规则:");
+        outLabel.setStyle("-fx-font-weight: bold; -fx-text-fill: #374151;");
         TextField suffixField = new TextField("_processed");
-        suffixField.setPromptText("输出文件后缀");
+        suffixField.setPromptText("例如: _edit, _v2");
+        outCard.getChildren().addAll(outLabel, suffixField);
 
-        Button startBtn = new Button("开始批量处理");
+        // 按钮
+        Button startBtn = new Button("🚀  启动流水线");
+        startBtn.setMaxWidth(Double.MAX_VALUE);
+        startBtn.setPrefHeight(45);
+        // 基础样式由CSS控制
+
+        content.getChildren().addAll(header, opCard, outCard, startBtn);
+        dialog.getDialogPane().setContent(content);
+
+        // 关闭按钮逻辑
+        dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
+        Node closeBtn = dialog.getDialogPane().lookupButton(ButtonType.CLOSE);
+        closeBtn.setVisible(false); closeBtn.setManaged(false);
+
         startBtn.setOnAction(e -> {
-            executeBatchProcessing(files, operationCombo.getValue(),
-                    paramSlider.getValue(), suffixField.getText());
             dialog.close();
+            executeBatchProcessing(files, opCombo.getValue(), paramSlider.getValue(), suffixField.getText());
         });
 
-        content.getChildren().addAll(infoLabel,
-                new Label("选择操作:"), operationCombo,
-                paramBox,
-                new Label("输出文件后缀:"), suffixField,
-                startBtn);
-
-        dialog.getDialogPane().setContent(content);
-        dialog.getDialogPane().getButtonTypes().add(ButtonType.CANCEL);
         dialog.showAndWait();
     }
 
@@ -1944,86 +2118,80 @@ public class ModernImageEditor extends Application {
      */
     private StackPane createCenterPanel() {
         StackPane centerPane = new StackPane();
+        // [修改] 给主背景容器设置ID，方便后续 updateCenterPanelStyle 调用
+        centerPane.setId("center-pane");
 
         // 图像容器
         VBox imageContainer = new VBox(20);
         imageContainer.setAlignment(Pos.CENTER);
-        imageContainer.setPadding(new Insets(20));
+        imageContainer.setPadding(new Insets(30)); // [修改] 增加内边距让视觉更舒展
 
         // 图像视图
         imageView = new ImageView();
         imageView.setPreserveRatio(true);
         imageView.setSmooth(true);
+        // [新增] 给图片添加阴影效果，提升立体感
+        imageView.setEffect(new DropShadow(20, Color.rgb(0,0,0,0.3)));
 
         // 创建交互覆盖层
         Pane interactionOverlay = new Pane();
         interactionOverlay.setMouseTransparent(false);
         interactionOverlay.setStyle("-fx-background-color: transparent;");
 
-
         // 创建用于显示选择框的画布
         Canvas selectionCanvas = new Canvas();
-        selectionCanvas.setMouseTransparent(true); // 画布不接收鼠标事件
-        selectionCanvas.setId("selection-canvas");  // 设置ID
-        GraphicsContext gc = selectionCanvas.getGraphicsContext2D();
+        selectionCanvas.setMouseTransparent(true);
+        selectionCanvas.setId("selection-canvas"); // [保留] 逻辑核心ID
 
+        GraphicsContext gc = selectionCanvas.getGraphicsContext2D();
         StackPane imagePane = new StackPane();
         imagePane.setStyle("-fx-background-color: transparent;");
         imagePane.getChildren().addAll(imageView, selectionCanvas, interactionOverlay);
 
-        // 为覆盖层添加鼠标事件监听
+        // [保留] 鼠标交互逻辑不变
         setupMouseInteraction(interactionOverlay, selectionCanvas);
 
-        // 图像控制按钮
+        // 图像控制按钮 - [修改] 样式美化
         HBox controlButtons = new HBox(15);
         controlButtons.setAlignment(Pos.CENTER);
         controlButtons.setId("control-buttons");
-        controlButtons.setStyle("-fx-background-color: rgba(255,255,255,0.9); " +
-                "-fx-background-radius: 15; " +
-                "-fx-padding: 8 15; " +
-                "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.1), 5, 0, 0, 2);");
+        // [修改] 使用 Change UI 的悬浮条样式
+        controlButtons.setStyle("-fx-background-color: rgba(255,255,255,0.9); -fx-background-radius: 30; -fx-padding: 8 20; -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.2), 0, 5, 0, 0);");
 
-        Button zoomIn = createIconButton("➕", "放大");
-        zoomIn.setOnAction(e -> zoomIn());
+        // [保留] 按钮逻辑，但样式稍作调整
+        String smallBtnStyle = "-fx-min-width: 30; -fx-min-height: 30; -fx-background-radius: 15; -fx-background-color: white; -fx-cursor: hand; -fx-text-fill: black; -fx-border-color: #ddd; -fx-border-radius: 15;";
 
-        Button zoomOut = createIconButton("➖", "缩小");
-        zoomOut.setOnAction(e -> zoomOut());
-
-        Button zoomFit = createIconButton("⛶", "适应");
-        zoomFit.setOnAction(e -> fitToWindow());
-
-        Button zoom100 = createIconButton("1:1", "原始");
-        zoom100.setOnAction(e -> resetZoom());
-
-        // 添加确认裁剪按钮
-        Button confirmCropBtn = createIconButton("✓", "确认裁剪");
-        confirmCropBtn.setVisible(false);
-        confirmCropBtn.setOnAction(e -> applyCropSelection());
+        Button zoomIn = new Button(" ➕ "); zoomIn.setOnAction(e -> zoomIn()); zoomIn.setStyle(smallBtnStyle);
+        Button zoomOut = new Button(" ➖ "); zoomOut.setOnAction(e -> zoomOut()); zoomOut.setStyle(smallBtnStyle);
+        Button zoomFit = new Button(" ⛶ "); zoomFit.setOnAction(e -> fitToWindow()); zoomFit.setStyle(smallBtnStyle);
+        Button zoom100 = new Button("1:1"); zoom100.setOnAction(e -> resetZoom()); zoom100.setStyle(smallBtnStyle);
+        Button confirmCropBtn = new Button(" ✓ "); confirmCropBtn.setVisible(false); confirmCropBtn.setOnAction(e -> applyCropSelection());
+        confirmCropBtn.setStyle(smallBtnStyle + "-fx-background-color: #2ecc71; -fx-text-fill: white;");
 
         controlButtons.getChildren().addAll(zoomIn, zoomOut, zoomFit, zoom100, confirmCropBtn);
-
         imageContainer.getChildren().addAll(imagePane, controlButtons);
 
         // 滚动面板
         imageScrollPane = new ScrollPane(imageContainer);
         imageScrollPane.setFitToWidth(true);
         imageScrollPane.setFitToHeight(true);
-        imageScrollPane.setStyle("-fx-background-color: transparent;");
+        // [修改] 背景完全透明，由下层 StackPane 负责显示棋盘格
+        imageScrollPane.setStyle("-fx-background: transparent; -fx-background-color: transparent;");
         imageScrollPane.setId("image-scroll-pane");
 
         // 占位符
         VBox placeholder = new VBox(20);
         placeholder.setAlignment(Pos.CENTER);
         placeholder.setId("placeholder");
-        placeholder.setStyle("-fx-background-color: transparent;");
 
-        Label placeholderIcon = new Label("📷");
-        placeholderIcon.setStyle("-fx-font-size: 80px; -fx-opacity: 0.3;");
+        Label placeholderIcon = new Label(" 📷 ");
+        placeholderIcon.setStyle("-fx-font-size: 80px; -fx-opacity: 0.3; -fx-text-fill: gray;");
+        Label placeholderText = new Label("拖放图片或点击打开");
+        placeholderText.setStyle("-fx-font-size: 20px; -fx-font-weight: bold; -fx-opacity: 0.5; -fx-text-fill: gray;");
 
-        Label placeholderText = new Label("点击打开按钮选择图片");
-        placeholderText.setStyle("-fx-font-size: 18px; -fx-opacity: 0.6;");
-
-        Button quickOpenBtn = new Button("📁 打开图片");
+        Button quickOpenBtn = new Button(" 📂  打开图片");
+        // [修改] 按钮样式美化
+        quickOpenBtn.setStyle("-fx-background-color: linear-gradient(to right, #667eea, #764ba2); -fx-text-fill: white; -fx-background-radius: 20; -fx-padding: 10 30; -fx-font-size: 14px; -fx-cursor: hand;");
         quickOpenBtn.setOnAction(e -> openImage());
 
         placeholder.getChildren().addAll(placeholderIcon, placeholderText, quickOpenBtn);
@@ -2031,8 +2199,6 @@ public class ModernImageEditor extends Application {
         // 初始状态
         imageScrollPane.setVisible(false);
         controlButtons.setVisible(false);
-        placeholder.setVisible(true);
-
         centerPane.getChildren().addAll(imageScrollPane, placeholder);
 
         return centerPane;
@@ -2660,61 +2826,72 @@ public class ModernImageEditor extends Application {
      * 创建右侧面板
      */
     private ScrollPane createRightPanel() {
-        rightPanel = new VBox(20);
-        rightPanel.setPadding(new Insets(20));
-        rightPanel.setPrefWidth(280);
-        // 初始样式将在主题应用时设置
+        VBox content = new VBox(20);
+        content.setPadding(new Insets(20));
+        content.setPrefWidth(300);
 
-        // 历史记录
-        Label historyLabel = createSectionLabel("📜 操作历史");
-
+        // 1. 操作历史卡片
+        // 优化 ListView 样式，使其融入卡片
         historyListView = new ListView<>();
-        historyListView.setPrefHeight(300);
-        // 初始样式将在主题应用时设置
+        historyListView.setPrefHeight(250);
+        historyListView.setStyle("-fx-background-color: transparent; -fx-border-color: transparent; -fx-padding: 0;");
+        // 给 ListView 加个 ID，方便 CSS 进一步去除默认边框
+        historyListView.setId("history-list");
 
-        Separator sep1 = new Separator();
+        // 清空历史按钮 (放在标题栏旁边或底部，这里放在底部)
+        Button clearHistoryBtn = new Button("清空记录");
+        clearHistoryBtn.setStyle("-fx-background-color: transparent; -fx-text-fill: #999; -fx-font-size: 11px; -fx-cursor: hand; -fx-padding: 5 0;");
+        clearHistoryBtn.setOnAction(e -> {
+            historyListView.getItems().clear();
+            updateStatus("历史记录已清空");
+        });
 
-        // 图像信息
-        Label infoLabel = createSectionLabel("ℹ️ 图像信息");
+        VBox historyCard = createCard("📜  操作时光机", historyListView, clearHistoryBtn);
 
-        VBox infoBox = new VBox(10);
-        // 初始样式将在主题应用时设置
+        // 2. 图像信息卡片 (使用 GridPane 对齐)
+        GridPane infoGrid = new GridPane();
+        infoGrid.setHgap(15);
+        infoGrid.setVgap(10);
 
-        Label sizeLabel = new Label("尺寸: --");
-        sizeLabel.setStyle("-fx-font-size: 13px;");
+        // 创建信息标签的辅助方法
+        addInfoRow(infoGrid, 0, "📏 尺寸", "size-label", "-- x --");
+        addInfoRow(infoGrid, 1, "📁 格式", "format-label", "--");
+        addInfoRow(infoGrid, 2, "💾 大小", "filesize-label", "-- MB");
 
-        Label formatLabel = new Label("格式: --");
-        formatLabel.setStyle("-fx-font-size: 13px;");
+        VBox infoCard = createCard("ℹ️  图像档案", infoGrid);
 
-        Label fileSizeLabel = new Label("大小: --");
-        fileSizeLabel.setStyle("-fx-font-size: 13px;");
+        // 3. 快捷操作卡片
+        Button resetBtn = createOperationButton("🔄  重置图片", e -> resetImage());
+        // 给重置按钮一个警示色（淡红）
+        resetBtn.setStyle("-fx-background-color: rgba(255, 82, 82, 0.1); -fx-text-fill: #ff5252; -fx-background-radius: 6; -fx-cursor: hand; -fx-font-weight: bold;");
 
-        infoBox.getChildren().addAll(sizeLabel, formatLabel, fileSizeLabel);
+        Button clearBtn = createOperationButton("🗑️  清空画布", e -> clearCanvas());
 
-        Separator sep2 = new Separator();
+        VBox quickCard = createCard("⚡  快捷指令", resetBtn, clearBtn);
 
-        // 快捷操作
-        Label quickLabel = createSectionLabel("⚡ 快捷操作");
+        // 添加所有卡片
+        content.getChildren().addAll(historyCard, infoCard, quickCard);
 
-        Button resetBtn = createOperationButton("🔄 重置图片");
-        resetBtn.setPrefWidth(Double.MAX_VALUE);
-        resetBtn.setOnAction(e -> resetImage());
+        // 赋值给成员变量
+        rightPanel = content;
 
-        Button clearBtn = createOperationButton("🗑️ 清空画布");
-        clearBtn.setPrefWidth(Double.MAX_VALUE);
-        clearBtn.setOnAction(e -> clearCanvas());
-
-        rightPanel.getChildren().addAll(
-                historyLabel, historyListView,
-                sep1, infoLabel, infoBox,
-                sep2, quickLabel, resetBtn, clearBtn
-        );
-
-        ScrollPane scrollPane = new ScrollPane(rightPanel);
+        ScrollPane scrollPane = new ScrollPane(content);
         scrollPane.setFitToWidth(true);
-        scrollPane.setStyle("-fx-background-color: transparent;");
-
+        scrollPane.setStyle("-fx-background: transparent; -fx-background-color: transparent;");
         return scrollPane;
+    }
+
+    // [新增辅助] 快速添加信息行
+    private void addInfoRow(GridPane grid, int row, String title, String valueId, String defaultValue) {
+        Label t = new Label(title);
+        t.setStyle("-fx-text-fill: #888; -fx-font-size: 12px;");
+
+        Label v = new Label(defaultValue);
+        v.setId(valueId); // 务必设置ID，方便 updateCenterPanelStyle 或其他逻辑更新数值
+        v.setStyle("-fx-font-weight: bold; -fx-text-fill: #555;");
+
+        grid.add(t, 0, row);
+        grid.add(v, 1, row);
     }
 
     /**
@@ -2722,6 +2899,8 @@ public class ModernImageEditor extends Application {
      */
     private HBox createBottomBar() {
         HBox bottomBar = new HBox(20);
+        bottomBar.getStyleClass().add("bottom-bar");
+        bottomBar.setAlignment(Pos.CENTER_LEFT);
         bottomBar.setPadding(new Insets(10, 20, 10, 20));
         bottomBar.setAlignment(Pos.CENTER_LEFT);
         // 初始样式将在主题应用时设置
@@ -2750,6 +2929,36 @@ public class ModernImageEditor extends Application {
         Label label = new Label(text);
         label.setStyle("-fx-font-size: 14px; -fx-font-weight: bold;");
         return label;
+    }
+
+    /**
+     * [新增] 创建卡片式容器
+     * 用于将功能分组，提供圆角、背景色和阴影，提升视觉层次感
+     */
+    private VBox createCard(String title, Node... nodes) {
+        VBox card = new VBox(15);
+        card.setPadding(new Insets(15));
+        // 初始样式（稍后会被 updatePanelStyles 覆盖以适应主题）
+        card.setStyle("-fx-background-color: rgba(255,255,255,0.6); -fx-background-radius: 12; -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.05), 5, 0, 0, 0);");
+        // 给卡片打上标签，方便主题切换时识别
+        card.setId("content-card");
+
+        if (title != null && !title.isEmpty()) {
+            Label titleLabel = new Label(title);
+            // 使用更现代的标题样式
+            titleLabel.setStyle("-fx-font-size: 14px; -fx-font-weight: bold; -fx-opacity: 0.8;");
+            // 标记为标题标签，方便主题更新颜色
+            titleLabel.setId("card-title");
+            card.getChildren().add(titleLabel);
+        }
+
+        // 如果传入的是节点数组，添加到卡片中
+        if (nodes != null) {
+            for (Node node : nodes) {
+                card.getChildren().add(node);
+            }
+        }
+        return card;
     }
 
     private Button createIconButton(String icon, String tooltip) {
@@ -3294,62 +3503,148 @@ public class ModernImageEditor extends Application {
     }
 
     private void applyArtisticStyle() {
-        if (currentImage == null || imageEditorService == null) return;
+        if (currentImage == null) {
+            showError("提示", "请先加载图片");
+            return;
+        }
 
-        // 创建选择对话框
-        List<String> styles = new ArrayList<>();
-        styles.add("油画");
-        styles.add("水彩");
-        styles.add("素描");
-        styles.add("卡通");
-        styles.add("马赛克");
-        ChoiceDialog<String> dialog = new ChoiceDialog<>(styles.get(0), styles);
-        dialog.setTitle("选择艺术风格");
-        dialog.setHeaderText("选择要应用的艺术风格");
-        dialog.setContentText("风格:");
+        // 1. 创建自定义对话框
+        Dialog<Void> dialog = new Dialog<>();
+        dialog.setTitle("艺术画廊");
 
-        dialog.showAndWait().ifPresent(style -> {
-            showProgress("应用艺术风格中...");
+        // 应用主场景样式
+        try {
+            if (mainScene != null) dialog.getDialogPane().getStylesheets().addAll(mainScene.getStylesheets());
+        } catch (Exception e) {}
 
-            new Thread(() -> {
-                try {
-                    ArtisticStyleOperation.ArtisticStyle selectedStyle;
-                    switch (style) {
-                        case "油画": selectedStyle = ArtisticStyleOperation.ArtisticStyle.OIL_PAINTING; break;
-                        case "水彩": selectedStyle = ArtisticStyleOperation.ArtisticStyle.WATERCOLOR; break;
-                        case "素描": selectedStyle = ArtisticStyleOperation.ArtisticStyle.PENCIL_SKETCH; break;
-                        case "卡通": selectedStyle = ArtisticStyleOperation.ArtisticStyle.CARTOON; break;
-                        default: selectedStyle = ArtisticStyleOperation.ArtisticStyle.MOSAIC; break;
-                    }
+        // 2. 自定义头部 (Emoji + 标题)
+        VBox headerBox = new VBox(5);
+        headerBox.setAlignment(Pos.CENTER);
+        headerBox.setPadding(new Insets(0, 0, 20, 0));
+        Label iconLbl = new Label("🎨");
+        iconLbl.setStyle("-fx-font-size: 48px; -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.15), 5, 0, 0, 2);");
+        Label titleLbl = new Label("选择艺术流派");
+        titleLbl.setStyle("-fx-font-size: 18px; -fx-font-weight: bold; -fx-text-fill: #111827;");
+        Label subTitleLbl = new Label("一键将照片转换为名画风格");
+        subTitleLbl.setStyle("-fx-font-size: 12px; -fx-text-fill: #6b7280;");
+        headerBox.getChildren().addAll(iconLbl, titleLbl, subTitleLbl);
 
-                    ArtisticStyleOperation.StyleParameters params =
-                            new ArtisticStyleOperation.StyleParameters(0.7f, 5, 0.5f);
-                    ArtisticStyleOperation operation = new ArtisticStyleOperation(selectedStyle, params);
+        // 3. 内容区域
+        VBox content = new VBox(15);
+        content.setPadding(new Insets(25));
+        content.setPrefWidth(360);
 
-                    imageEditorService.applyOperationAsync(
-                            operation,
-                            resultImage -> Platform.runLater(() -> {
-                                currentImage = resultImage;
-                                imageView.setImage(currentImage);
-                                currentBufferedImage = ImageUtils.fxImageToBufferedImage(currentImage);
-                                updateHistory("艺术风格: " + style);
-                                updateStatus("艺术风格应用完成");
-                                hideProgress();
-                                playSuccessAnimation();
-                            }),
-                            exception -> Platform.runLater(() -> {
-                                hideProgress();
-                                showError("艺术风格应用失败", exception.getMessage());
-                            })
-                    );
-                } catch (Exception e) {
-                    Platform.runLater(() -> {
-                        hideProgress();
-                        showError("艺术风格应用失败", e.getMessage());
-                    });
-                }
-            }).start();
+        // 风格选择标签
+        Label styleLbl = new Label("请选择目标风格:");
+        styleLbl.setStyle("-fx-font-weight: bold; -fx-text-fill: #374151; -fx-font-size: 13px;");
+
+        // 风格下拉框
+        ComboBox<String> styleCombo = new ComboBox<>();
+        styleCombo.getItems().addAll("油画", "水彩", "素描", "卡通", "马赛克");
+        styleCombo.setValue("油画");
+        styleCombo.setMaxWidth(Double.MAX_VALUE);
+        styleCombo.setPrefHeight(45); // 加高一点，更舒适
+
+        // 动态描述卡片
+        Label descLbl = new Label("厚重的笔触和丰富的色彩层次，模拟经典油画质感。");
+        descLbl.setWrapText(true);
+        descLbl.setPrefHeight(60);
+        descLbl.setAlignment(Pos.TOP_LEFT);
+        // 给描述加个灰色圆角背景
+        descLbl.setStyle("-fx-text-fill: #6b7280; -fx-font-size: 12px; -fx-background-color: #f3f4f6; -fx-padding: 12; -fx-background-radius: 8; -fx-border-color: #e5e7eb; -fx-border-radius: 8;");
+
+        // 监听选择变化，更新描述
+        styleCombo.getSelectionModel().selectedItemProperty().addListener((obs, old, newVal) -> {
+            String desc = "";
+            switch (newVal) {
+                case "油画": desc = "厚重的笔触和丰富的色彩层次，模拟梵高式经典油画质感。"; break;
+                case "水彩": desc = "清透的色彩晕染和水的流动感，营造清新梦幻的艺术意境。"; break;
+                case "素描": desc = "纯粹的黑白线条交织，还原光影关系，呈现手绘速写效果。"; break;
+                case "卡通": desc = "明快的色彩块面和清晰的轮廓线，仿佛置身于二次元动画世界。"; break;
+                case "马赛克": desc = "将图像抽象为多彩的像素方块，充满复古电子游戏风味。"; break;
+            }
+            descLbl.setText(desc);
         });
+
+        // 4. 应用按钮
+        Button applyBtn = new Button("✨  立即转换");
+        applyBtn.setMaxWidth(Double.MAX_VALUE);
+        applyBtn.setPrefHeight(45);
+        // 继承 CSS .button 样式，无需额外写 style
+
+        content.getChildren().addAll(headerBox, styleLbl, styleCombo, descLbl, applyBtn);
+
+        dialog.getDialogPane().setContent(content);
+        // 必须添加一个 ButtonType 才能显示关闭按钮，但我们隐藏它，只用右上角的X
+        dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
+        Node closeBtn = dialog.getDialogPane().lookupButton(ButtonType.CLOSE);
+        closeBtn.setVisible(false);
+        closeBtn.setManaged(false);
+
+        // 5. 点击事件
+        applyBtn.setOnAction(e -> {
+            String selected = styleCombo.getValue();
+            dialog.close(); // 立即关闭窗口
+
+            // 映射中文到枚举
+            ArtisticStyleOperation.ArtisticStyle styleEnum;
+            switch(selected) {
+                case "油画": styleEnum = ArtisticStyleOperation.ArtisticStyle.OIL_PAINTING; break;
+                case "水彩": styleEnum = ArtisticStyleOperation.ArtisticStyle.WATERCOLOR; break;
+                case "素描": styleEnum = ArtisticStyleOperation.ArtisticStyle.PENCIL_SKETCH; break;
+                case "卡通": styleEnum = ArtisticStyleOperation.ArtisticStyle.CARTOON; break;
+                default: styleEnum = ArtisticStyleOperation.ArtisticStyle.MOSAIC; break;
+            }
+
+            // 调用处理逻辑
+            applyOp(new ArtisticStyleOperation(styleEnum, new ArtisticStyleOperation.StyleParameters(0.7f, 5, 0.5f)));
+        });
+
+        dialog.showAndWait();
+    }
+
+    private void applyOp(ImageOperation op) {
+        // 1. 显示进度条
+        showProgress("正在处理...");
+
+        // 2. 开启新线程执行耗时操作，避免卡死 UI
+        new Thread(() -> {
+            try {
+                // 调用 Service 层进行异步处理
+                imageEditorService.applyOperationAsync(
+                        op,
+                        // 成功回调
+                        resultImage -> Platform.runLater(() -> {
+                            // 更新当前图片引用
+                            currentImage = resultImage;
+                            imageView.setImage(resultImage);
+
+                            // 尝试同步更新 BufferedImage (如果你的项目架构需要)
+                            try {
+                                currentBufferedImage = ImageUtils.fxImageToBufferedImage(resultImage);
+                            } catch (Exception ignored) {}
+
+                            // 隐藏进度条并播放成功动画
+                            hideProgress();
+                            playSuccessAnimation(); // 如果你没有这个方法，可以删掉这行
+
+                            // 记录历史 (可选)
+                            // updateHistory("应用操作");
+                        }),
+                        // 失败回调
+                        error -> Platform.runLater(() -> {
+                            hideProgress();
+                            showError("操作失败", error.getMessage());
+                        })
+                );
+            } catch(Exception e) {
+                // 捕获线程启动异常
+                Platform.runLater(() -> {
+                    hideProgress();
+                    showError("系统错误", e.getMessage());
+                });
+            }
+        }).start();
     }
 
     private void applyOperation(Object operation, String operationName) {
@@ -3511,12 +3806,57 @@ public class ModernImageEditor extends Application {
     }
 
     private void showProgress(String message) {
-        statusLabel.setText(message);
-        progressIndicator.setVisible(true);
+        if (loadingOverlay == null) {
+            // 1. 懒加载创建遮罩
+            loadingOverlay = new StackPane();
+            loadingOverlay.getStyleClass().add("loading-overlay");
+            loadingOverlay.setVisible(false);
+
+            VBox content = new VBox(20);
+            content.setAlignment(Pos.CENTER);
+
+            // 大号进度圈
+            ProgressIndicator pi = new ProgressIndicator();
+            pi.setPrefSize(60, 60);
+
+            loadingText = new Label(message);
+            loadingText.getStyleClass().add("loading-text");
+
+            content.getChildren().addAll(pi, loadingText);
+            loadingOverlay.getChildren().add(content);
+
+            // 2. 智能挂载遮罩 (修复报错的核心逻辑)
+            // 尝试挂载到 root 的 Center 区域 (即中间的画板 StackPane)
+            if (root != null && root.getCenter() instanceof StackPane) {
+                StackPane centerStack = (StackPane) root.getCenter();
+                if (!centerStack.getChildren().contains(loadingOverlay)) {
+                    centerStack.getChildren().add(loadingOverlay);
+                }
+            } else {
+                // 如果找不到中间区域，尝试挂载到 Scene 的根节点
+                if (mainScene != null && mainScene.getRoot() instanceof Pane) {
+                    Pane sceneRoot = (Pane) mainScene.getRoot();
+                    if (!sceneRoot.getChildren().contains(loadingOverlay)) {
+                        sceneRoot.getChildren().add(loadingOverlay);
+                    }
+                }
+            }
+        }
+
+        // 3. 显示遮罩
+        if (loadingText != null) loadingText.setText(message);
+        if (loadingOverlay != null) {
+            loadingOverlay.setVisible(true);
+            loadingOverlay.toFront(); // 确保在最上层
+        }
     }
 
     private void hideProgress() {
-        progressIndicator.setVisible(false);
+        if (loadingOverlay != null) {
+            loadingOverlay.setVisible(false);
+        }
+        // 同时隐藏底部的小圈（为了兼容旧代码）
+        if (progressIndicator != null) progressIndicator.setVisible(false);
     }
 
     private void showError(String title, String message) {
@@ -3544,24 +3884,61 @@ public class ModernImageEditor extends Application {
     }
 
     private void showHelp() {
-        Alert alert = new Alert(Alert.AlertType.INFORMATION);
-        alert.setTitle("帮助");
-        alert.setHeaderText("AI Image Editor Pro - 使用指南");
-        alert.setContentText(
-                "1. 点击打开按钮加载图片\n" +
-                        "2. 使用左侧面板调整图片参数\n" +
-                        "3. 点击各种效果按钮应用处理\n" +
-                        "4. 使用撤销/重做按钮管理历史\n" +
-                        "5. 完成后点击保存导出图片\n\n" +
-                        "快捷键:\n" +
-                        "Ctrl+O - 打开图片\n" +
-                        "Ctrl+S - 保存图片\n" +
-                        "Ctrl+Z - 撤销\n" +
-                        "Ctrl+Y - 重做\n" +
-                        "Ctrl+T - 切换主题\n" +
-                        "Ctrl+Shift+T - 打开主题选择器"
+        Dialog<Void> dialog = new Dialog<>();
+        dialog.setTitle("关于");
+        try { if (mainScene != null) dialog.getDialogPane().getStylesheets().addAll(mainScene.getStylesheets()); } catch (Exception e) {}
+
+        VBox content = new VBox(20);
+        content.setAlignment(Pos.CENTER);
+        content.setPadding(new Insets(30));
+        content.setPrefWidth(400);
+
+        // Logo
+        StackPane logoPane = new StackPane();
+        Circle bg = new Circle(40, Color.web("#667eea"));
+        Label icon = new Label("🎨");
+        icon.setStyle("-fx-font-size: 40px; -fx-text-fill: white;");
+        logoPane.getChildren().addAll(bg, icon);
+        logoPane.setEffect(new DropShadow(15, Color.rgb(102, 126, 234, 0.4)));
+
+        Label title = new Label("AI Image Editor Pro");
+        title.setStyle("-fx-font-size: 20px; -fx-font-weight: bold; -fx-text-fill: #111827;");
+
+        Label ver = new Label("Version 3.1.0 Ultimate");
+        ver.setStyle("-fx-text-fill: #9ca3af; -fx-font-size: 12px;");
+
+        // 快捷键列表
+        VBox keys = new VBox(8);
+        keys.setStyle("-fx-background-color: #f9fafb; -fx-padding: 15; -fx-background-radius: 8;");
+        keys.getChildren().addAll(
+                createKeyRow("Ctrl + O", "打开图片"),
+                createKeyRow("Ctrl + S", "保存图片"),
+                createKeyRow("Ctrl + Z", "撤销操作"),
+                createKeyRow("Ctrl + T", "切换主题")
         );
-        alert.showAndWait();
+
+        Button closeBtn = new Button("我知道了");
+        closeBtn.setPrefWidth(120);
+        closeBtn.setOnAction(e -> dialog.close());
+
+        content.getChildren().addAll(logoPane, title, ver, keys, closeBtn);
+
+        dialog.getDialogPane().setContent(content);
+        dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
+        dialog.getDialogPane().lookupButton(ButtonType.CLOSE).setVisible(false);
+        dialog.showAndWait();
+    }
+
+    // 辅助方法：创建快捷键行
+    private HBox createKeyRow(String key, String desc) {
+        HBox row = new HBox(10);
+        Label k = new Label(key);
+        k.setStyle("-fx-font-family: 'Consolas'; -fx-font-weight: bold; -fx-text-fill: #667eea; -fx-background-color: rgba(102,126,234,0.1); -fx-padding: 2 6; -fx-background-radius: 4;");
+        Label d = new Label(desc);
+        d.setStyle("-fx-text-fill: #4b5563;");
+        Region sp = new Region(); HBox.setHgrow(sp, Priority.ALWAYS);
+        row.getChildren().addAll(d, sp, k);
+        return row;
     }
 
     private String getFileExtension(String filename) {
@@ -3570,6 +3947,29 @@ public class ModernImageEditor extends Application {
             return filename.substring(lastDot + 1);
         }
         return "png";
+    }
+
+    private Background createCheckerboardBackground(String baseColorHex) {
+        Color baseColor = Color.web(baseColorHex);
+        int size = 20;
+        Canvas canvas = new Canvas(size * 2, size * 2);
+        GraphicsContext gc = canvas.getGraphicsContext2D();
+
+        gc.setFill(baseColor);
+        gc.fillRect(0, 0, size * 2, size * 2);
+
+        // 绘制淡淡的格纹
+        Color checkColor = baseColor.grayscale().getBrightness() > 0.5 ?
+                baseColor.darker() : baseColor.brighter();
+        gc.setFill(Color.color(checkColor.getRed(), checkColor.getGreen(), checkColor.getBlue(), 0.05));
+        gc.fillRect(0, 0, size, size);
+        gc.fillRect(size, size, size, size);
+
+        SnapshotParameters params = new SnapshotParameters();
+        params.setFill(Color.TRANSPARENT);
+        WritableImage patternImage = canvas.snapshot(params, null);
+
+        return new Background(new BackgroundFill(new ImagePattern(patternImage, 0, 0, size * 2, size * 2, false), CornerRadii.EMPTY, Insets.EMPTY));
     }
 
     @FunctionalInterface

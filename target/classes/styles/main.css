@@ -1,104 +1,483 @@
-/* main.css - 简洁的亮色主题 */
+/* style.css - 现代 UI 样式表 */
 
-/* ==================== 全局样式 ==================== */
+/* 1. 全局字体优化 */
 .root {
-    -fx-background-color: #f5f7fa;
-    -fx-font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+    -fx-font-family: 'Microsoft YaHei', 'Segoe UI', sans-serif;
+    /* 移除默认的聚焦蓝框，让界面更干净 */
+    -fx-focus-color: transparent;
+    -fx-faint-focus-color: transparent;
 }
 
-/* ==================== 工具栏 ==================== */
-.top-bar {
+/* 2. 极简滚动条 (类似 Chrome/VS Code) */
+.scroll-pane {
+    -fx-background-color: transparent;
+}
+
+.scroll-pane > .viewport {
+    -fx-background-color: transparent;
+}
+
+.scroll-bar {
+    -fx-background-color: transparent;
+    -fx-background-radius: 0;
+}
+
+.scroll-bar:horizontal {
+    -fx-pref-height: 10;
+}
+
+.scroll-bar:vertical {
+    -fx-pref-width: 10;
+}
+
+.scroll-bar .thumb {
+    -fx-background-color: rgba(128, 128, 128, 0.3);
+    -fx-background-radius: 5em;
+}
+
+.scroll-bar .thumb:hover {
+    -fx-background-color: rgba(128, 128, 128, 0.6);
+}
+
+.scroll-bar .track {
+    -fx-background-color: transparent;
+}
+
+.scroll-bar .increment-button,
+.scroll-bar .decrement-button {
+    -fx-padding: 0;
+    -fx-shape: " "; /* 隐藏两端的小箭头 */
+    -fx-background-color: transparent;
+}
+
+/* 3. 现代滑块 (Slider) - 解决原生滑块丑陋的问题 */
+.slider .track {
+    -fx-background-color: rgba(128, 128, 128, 0.2);
+    -fx-background-radius: 5px;
+    -fx-pref-height: 6px; /* 轨道变细 */
+}
+
+.slider .thumb {
     -fx-background-color: white;
-    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.1), 10, 0, 0, 2);
-    -fx-padding: 15 20;
+    -fx-border-color: #d1d1d1;
+    -fx-border-radius: 10px;
+    -fx-background-radius: 10px;
+    -fx-pref-width: 16px;
+    -fx-pref-height: 16px;
+    -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.2), 3, 0, 0, 1);
 }
 
-/* ==================== 按钮样式 ==================== */
-.gradient-button {
+.slider .thumb:hover {
+    -fx-background-color: #f0f0f0;
+    -fx-scale-x: 1.1;
+    -fx-scale-y: 1.1;
+}
+
+/* 4. 提示框 (Tooltip) - 深色模式 */
+.tooltip {
+    -fx-background-color: rgba(30, 30, 30, 0.9);
     -fx-text-fill: white;
-    -fx-background-radius: 8;
-    -fx-padding: 10 20;
+    -fx-background-radius: 6px;
+    -fx-padding: 6px 10px;
+    -fx-font-size: 12px;
+    -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.2), 5, 0, 0, 2);
+}
+
+/* 5. 菜单样式 (Menu) */
+.menu-button, .split-menu-button {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+}
+
+.context-menu {
+    -fx-background-color: white;
+    -fx-background-radius: 8px;
+    -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.1), 10, 0, 0, 5);
+    -fx-padding: 5px;
+}
+
+.menu-item {
+    -fx-background-color: transparent;
+    -fx-padding: 8px 15px;
+}
+
+.menu-item:focused {
+    -fx-background-color: #f0f0f0; /* 鼠标悬停时的浅灰背景 */
+    -fx-background-radius: 4px;
+}
+
+.menu-item .label {
+    -fx-text-fill: #333;
+}
+
+/* 6. 按钮通用动效 */
+.button, .toggle-button {
+    -fx-transition: -fx-background-color 0.2s, -fx-scale-x 0.1s, -fx-scale-y 0.1s;
+}
+
+.button:pressed, .toggle-button:pressed {
+    -fx-scale-x: 0.96;
+    -fx-scale-y: 0.96;
+}
+
+.list-view {
+    -fx-background-color: transparent;
+    -fx-background-insets: 0;
+    -fx-padding: 0;
+}
+
+.list-cell {
+    -fx-background-color: transparent;
+    -fx-text-fill: #555; /* 默认字体颜色 */
+    -fx-padding: 8px 10px;
+    -fx-border-color: transparent transparent rgba(128,128,128,0.1) transparent; /* 只有下边框 */
+    -fx-font-size: 12px;
+}
+
+/* 偶数行稍微变色，增加条纹感 */
+.list-cell:even {
+    -fx-background-color: rgba(0,0,0,0.02);
+}
+
+.list-cell:filled:selected, .list-cell:filled:selected:hover {
+    -fx-background-color: #667eea; /* 选中变紫 */
+    -fx-text-fill: white;
+}
+
+.list-cell:filled:hover {
+    -fx-background-color: rgba(102, 126, 234, 0.1); /* 悬浮变淡紫 */
+    -fx-cursor: hand;
+}
+
+/* 修复标签颜色 */
+.label {
+    -fx-font-family: 'Microsoft YaHei', sans-serif;
+}
+
+.root {
+    /* 全局字体优化 */
+    -fx-font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+    -fx-font-smoothing-type: lcd;
+    /* 去除默认聚焦蓝框 */
+    -fx-focus-color: transparent;
+    -fx-faint-focus-color: transparent;
+}
+
+/* --- 1. 按钮 (Button) - 华丽渐变与光晕 --- */
+.button {
+    /* 背景：高饱和度渐变 */
+    -fx-background-color: linear-gradient(to bottom right, #667eea, #764ba2);
+    -fx-text-fill: white;
+    -fx-background-radius: 8px;
     -fx-font-weight: bold;
-    -fx-cursor: hand;
-    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.2), 5, 0, 0, 2);
-}
-
-.gradient-button-primary {
-    -fx-background-color: linear-gradient(to right, #667eea, #764ba2);
-}
-
-.gradient-button-danger {
-    -fx-background-color: linear-gradient(to right, #f093fb, #f5576c);
-}
-
-.gradient-button-success {
-    -fx-background-color: linear-gradient(to right, #4facfe, #00f2fe);
-}
-
-.gradient-button-warning {
-    -fx-background-color: linear-gradient(to right, #fa709a, #fee140);
-}
-
-.icon-button {
-    -fx-background-color: #ecf0f1;
-    -fx-background-radius: 8;
-    -fx-padding: 8 12;
-    -fx-cursor: hand;
-}
-
-.icon-button:hover {
-    -fx-background-color: #d5dbdb;
-}
-
-.operation-button {
-    -fx-background-color: #f8f9fa;
-    -fx-border-color: #dee2e6;
-    -fx-border-radius: 6;
-    -fx-background-radius: 6;
-    -fx-padding: 8 12;
-    -fx-cursor: hand;
-}
-
-.operation-button:hover {
-    -fx-background-color: #e9ecef;
-}
-
-/* ==================== 面板样式 ==================== */
-.side-panel {
-    -fx-background-color: white;
-    -fx-border-color: #e0e0e0;
-}
-
-.left-panel {
-    -fx-border-width: 0 1 0 0;
-}
-
-.right-panel {
-    -fx-border-width: 0 0 0 1;
-}
-
-.section-label {
-    -fx-font-size: 14px;
-    -fx-font-weight: bold;
-    -fx-text-fill: #2c3e50;
-}
-
-/* ==================== 图像区域 ==================== */
-.image-container {
-    -fx-background-color: white;
-    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.2), 20, 0, 0, 5);
-    -fx-background-radius: 10;
-    -fx-padding: 20;
-}
-
-/* ==================== 状态栏 ==================== */
-.status-bar {
-    -fx-background-color: white;
-    -fx-border-color: #e0e0e0;
-    -fx-border-width: 1 0 0 0;
-}
-
-.status-label {
     -fx-font-size: 13px;
-    -fx-text-fill: #6c757d;
+    -fx-padding: 9px 18px;
+    -fx-cursor: hand;
+
+    /* 华丽的投影：模拟发光效果 */
+    -fx-effect: dropshadow(three-pass-box, rgba(118, 75, 162, 0.4), 10, 0, 0, 4);
+
+    /* 简单的缩放动效模拟 */
+    -fx-scale-x: 1.0;
+    -fx-scale-y: 1.0;
+}
+
+.button:hover {
+    /* 悬浮时：颜色变亮，光晕增强 */
+    -fx-background-color: linear-gradient(to bottom right, #764ba2, #667eea);
+    -fx-effect: dropshadow(gaussian, rgba(118, 75, 162, 0.8), 15, 0.3, 0, 0);
+    -fx-scale-x: 1.03;
+    -fx-scale-y: 1.03;
+}
+
+.button:pressed {
+    -fx-background-color: #5b3cc4;
+    -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.2), 2, 0, 0, 1);
+    -fx-scale-x: 0.97;
+    -fx-scale-y: 0.97;
+}
+
+/* 针对“清空/重置”类危险操作按钮的特殊样式 */
+.button:text="🗑️  清空画布", .button:text="🔄  重置图片" {
+    -fx-background-color: rgba(255, 82, 82, 0.1);
+    -fx-text-fill: #ff5252;
+    -fx-border-color: #ff5252;
+    -fx-border-radius: 8px;
+    -fx-border-width: 1px;
+    -fx-effect: none;
+}
+.button:text="🗑️  清空画布":hover, .button:text="🔄  重置图片":hover {
+    -fx-background-color: #ff5252;
+    -fx-text-fill: white;
+    -fx-effect: dropshadow(gaussian, rgba(255, 82, 82, 0.6), 10, 0, 0, 0);
+}
+
+/* --- 2. 工具栏按钮 (ToggleButton) - 科技感线框 --- */
+.toggle-button {
+    -fx-background-color: transparent;
+    -fx-text-fill: #555;
+    -fx-border-color: rgba(128,128,128,0.3);
+    -fx-border-radius: 8px;
+    -fx-background-radius: 8px;
+    -fx-padding: 8px 12px;
+    -fx-cursor: hand;
+    -fx-transition: all 0.2s;
+}
+
+.toggle-button:hover {
+    -fx-border-color: #764ba2;
+    -fx-text-fill: #764ba2;
+    -fx-background-color: rgba(118, 75, 162, 0.05);
+}
+
+.toggle-button:selected {
+    /* 选中状态：实心渐变 + 强烈发光 */
+    -fx-background-color: linear-gradient(to right, #00c6ff, #0072ff);
+    -fx-text-fill: white;
+    -fx-border-color: transparent;
+    -fx-effect: dropshadow(three-pass-box, rgba(0, 114, 255, 0.5), 10, 0, 0, 2);
+    -fx-font-weight: bold;
+}
+
+/* --- 3. 宝石滑块 (Slider) --- */
+.slider .track {
+    -fx-background-color: rgba(128, 128, 128, 0.15);
+    -fx-background-radius: 5px;
+    -fx-pref-height: 6px;
+}
+
+.slider .thumb {
+    /* 模拟宝石质感 */
+    -fx-background-color: radial-gradient(center 50% 20%, radius 50%, white, #667eea);
+    -fx-border-color: rgba(255,255,255,0.8);
+    -fx-border-width: 2px;
+    -fx-background-radius: 15px;
+    -fx-border-radius: 15px;
+    -fx-pref-width: 20px;
+    -fx-pref-height: 20px;
+    -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.3), 5, 0, 0, 2);
+}
+
+.slider .thumb:hover {
+    -fx-background-color: radial-gradient(center 50% 20%, radius 50%, white, #764ba2);
+    -fx-scale-x: 1.15;
+    -fx-scale-y: 1.15;
+    -fx-cursor: hand;
+}
+
+/* --- 4. 历史记录列表 (ListView) - 悬浮卡片感 --- */
+.list-view {
+    -fx-background-color: transparent;
+    -fx-padding: 5px;
+}
+
+.list-cell {
+    -fx-background-color: white;
+    -fx-background-radius: 6px;
+    -fx-border-color: transparent;
+    -fx-padding: 10px;
+    -fx-text-fill: #444;
+    -fx-font-size: 12px;
+    /* 让每个 cell 都有间距 */
+    -fx-cell-size: 40px;
+    -fx-border-width: 0 0 5px 0; /* 用透明边框模拟间距 */
+    -fx-border-color: transparent;
+}
+
+.list-cell:filled {
+    -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.05), 3, 0, 0, 1);
+}
+
+.list-cell:filled:hover {
+    -fx-background-color: #f0f4ff;
+    -fx-translate-x: 2px; /* 悬浮微微右移 */
+    -fx-text-fill: #667eea;
+}
+
+.list-cell:filled:selected {
+    -fx-background-color: linear-gradient(to right, #667eea, #764ba2);
+    -fx-text-fill: white;
+    -fx-effect: dropshadow(three-pass-box, rgba(118, 75, 162, 0.4), 5, 0, 0, 2);
+}
+
+/* --- 5. 极简滚动条 (Scrollbar) --- */
+.scroll-bar {
+    -fx-background-color: transparent;
+}
+.scroll-bar .thumb {
+    -fx-background-color: rgba(0,0,0,0.1);
+    -fx-background-radius: 10em;
+}
+.scroll-bar .thumb:hover {
+    -fx-background-color: rgba(118, 75, 162, 0.5);
+}
+
+/* --- 6. 数值标签 (Value Label) --- */
+.value-label {
+    -fx-background-color: rgba(0,0,0,0.04);
+    -fx-text-fill: #667eea;
+    -fx-font-family: 'Consolas', monospace;
+    -fx-font-weight: bold;
+    -fx-padding: 3px 8px;
+    -fx-background-radius: 4px;
+}
+
+/* --- 7. 顶部菜单按钮 (MenuButton) --- */
+.menu-button {
+    -fx-background-color: rgba(255,255,255,0.5);
+    -fx-background-radius: 20px;
+    -fx-padding: 5px 15px;
+    -fx-border-color: rgba(0,0,0,0.1);
+    -fx-border-radius: 20px;
+}
+.menu-button:hover {
+    -fx-background-color: white;
+    -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.1), 5, 0, 0, 1);
+}
+
+.dialog-pane {
+    -fx-background-color: white; /* 纯净背景 */
+    -fx-padding: 0;
+}
+
+/* 隐藏默认的头部背景，自己画 */
+.dialog-pane .header-panel {
+    -fx-background-color: transparent;
+}
+
+/* 9. 现代输入框 (TextField, TextArea) */
+.text-input {
+    -fx-background-color: #f9fafb; /* 极淡的灰 */
+    -fx-border-color: #e5e7eb;
+    -fx-border-radius: 8px;
+    -fx-background-radius: 8px;
+    -fx-padding: 10px;
+    -fx-text-fill: #374151;
+    -fx-font-size: 13px;
+    -fx-highlight-fill: #667eea; /* 选中文本的背景色 */
+    -fx-transition: all 0.2s;
+}
+
+.text-input:focused {
+    -fx-background-color: white;
+    -fx-border-color: #667eea; /* 聚焦变紫 */
+    -fx-effect: dropshadow(three-pass-box, rgba(102, 126, 234, 0.2), 8, 0, 0, 0); /* 柔和光晕 */
+}
+
+.text-area {
+    /* 修正多行输入框的内边距 */
+    -fx-padding: 5px;
+}
+.text-area .content {
+    -fx-background-color: transparent;
+}
+
+/* 10. 进度条 (ProgressBar) - 极光风格 */
+.progress-bar {
+    -fx-pref-height: 8px;
+}
+.progress-bar .track {
+    -fx-background-color: #f3f4f6;
+    -fx-background-radius: 10px;
+}
+.progress-bar .bar {
+    -fx-background-color: linear-gradient(to right, #00b09b, #96c93d); /* 豆包绿渐变 */
+    -fx-background-radius: 10px;
+    -fx-effect: dropshadow(three-pass-box, rgba(150, 201, 61, 0.4), 8, 0, 0, 0);
+}
+
+/* 11. 文件选择按钮 (Browse Button) */
+.button.small-action {
+    -fx-padding: 6px 12px;
+    -fx-font-size: 12px;
+    -fx-background-color: #f3f4f6;
+    -fx-text-fill: #4b5563;
+    -fx-effect: none; /* 去掉默认的大光晕 */
+}
+.button.small-action:hover {
+    -fx-background-color: #e5e7eb;
+}
+
+.combo-box {
+    -fx-background-color: #f9fafb;
+    -fx-border-color: #e5e7eb;
+    -fx-border-radius: 8px;
+    -fx-background-radius: 8px;
+    -fx-padding: 6px;
+    -fx-font-size: 13px;
+    -fx-effect: none;
+}
+
+.combo-box:hover {
+    -fx-background-color: white;
+    -fx-border-color: #667eea; /* 悬浮变紫 */
+}
+
+.combo-box .list-cell {
+    -fx-background-color: transparent;
+    -fx-text-fill: #374151;
+    -fx-padding: 8px;
+}
+
+/* 下拉弹出面板 */
+.combo-box-popup .list-view {
+    -fx-background-color: white;
+    -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.1), 10, 0, 0, 5);
+    -fx-background-radius: 8px;
+    -fx-padding: 5px;
+}
+
+.combo-box-popup .list-cell:filled:hover {
+    -fx-background-color: #f0f4ff; /* 悬浮项变淡蓝 */
+    -fx-text-fill: #667eea;
+    -fx-background-radius: 4px;
+    -fx-cursor: hand;
+}
+
+.top-bar {
+    -fx-background-color: rgba(255, 255, 255, 0.75); /* 浅色半透明 */
+    -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.05), 10, 0, 0, 2);
+    -fx-padding: 15px 25px;
+    -fx-background-radius: 0 0 16px 16px; /* 只有下边圆角，像刘海 */
+}
+
+/* 14. 底部状态栏 (Glass Footer) */
+.bottom-bar {
+    -fx-background-color: rgba(255, 255, 255, 0.85);
+    -fx-border-color: transparent;
+    -fx-border-width: 1 0 0 0; /* 只有上边框 */
+    -fx-padding: 8px 20px;
+    -fx-font-size: 12px;
+    -fx-text-fill: #666;
+}
+
+/* 15. 全局加载遮罩 (Loading Overlay) */
+.loading-overlay {
+    -fx-background-color: rgba(255, 255, 255, 0.85); /* 强磨砂背景 */
+}
+.loading-text {
+    -fx-font-size: 16px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #667eea;
+    -fx-effect: dropshadow(gaussian, rgba(102, 126, 234, 0.3), 5, 0, 0, 0);
+}
+
+/* 16. 对话框中的图标按钮 */
+.icon-action-btn {
+    -fx-background-color: transparent;
+    -fx-cursor: hand;
+    -fx-text-fill: #666;
+    -fx-font-size: 14px;
+    -fx-border-color: #e5e7eb;
+    -fx-border-radius: 50%;
+    -fx-min-width: 32px;
+    -fx-min-height: 32px;
+    -fx-max-width: 32px;
+    -fx-max-height: 32px;
+    -fx-padding: 0;
+}
+.icon-action-btn:hover {
+    -fx-background-color: #f3f4f6;
+    -fx-text-fill: #667eea;
+    -fx-border-color: #667eea;
 }
