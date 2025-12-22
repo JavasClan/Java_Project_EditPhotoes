@@ -1,0 +1,104 @@
+/* main.css - 简洁的亮色主题 */
+
+/* ==================== 全局样式 ==================== */
+.root {
+    -fx-background-color: #f5f7fa;
+    -fx-font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+}
+
+/* ==================== 工具栏 ==================== */
+.top-bar {
+    -fx-background-color: white;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.1), 10, 0, 0, 2);
+    -fx-padding: 15 20;
+}
+
+/* ==================== 按钮样式 ==================== */
+.gradient-button {
+    -fx-text-fill: white;
+    -fx-background-radius: 8;
+    -fx-padding: 10 20;
+    -fx-font-weight: bold;
+    -fx-cursor: hand;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.2), 5, 0, 0, 2);
+}
+
+.gradient-button-primary {
+    -fx-background-color: linear-gradient(to right, #667eea, #764ba2);
+}
+
+.gradient-button-danger {
+    -fx-background-color: linear-gradient(to right, #f093fb, #f5576c);
+}
+
+.gradient-button-success {
+    -fx-background-color: linear-gradient(to right, #4facfe, #00f2fe);
+}
+
+.gradient-button-warning {
+    -fx-background-color: linear-gradient(to right, #fa709a, #fee140);
+}
+
+.icon-button {
+    -fx-background-color: #ecf0f1;
+    -fx-background-radius: 8;
+    -fx-padding: 8 12;
+    -fx-cursor: hand;
+}
+
+.icon-button:hover {
+    -fx-background-color: #d5dbdb;
+}
+
+.operation-button {
+    -fx-background-color: #f8f9fa;
+    -fx-border-color: #dee2e6;
+    -fx-border-radius: 6;
+    -fx-background-radius: 6;
+    -fx-padding: 8 12;
+    -fx-cursor: hand;
+}
+
+.operation-button:hover {
+    -fx-background-color: #e9ecef;
+}
+
+/* ==================== 面板样式 ==================== */
+.side-panel {
+    -fx-background-color: white;
+    -fx-border-color: #e0e0e0;
+}
+
+.left-panel {
+    -fx-border-width: 0 1 0 0;
+}
+
+.right-panel {
+    -fx-border-width: 0 0 0 1;
+}
+
+.section-label {
+    -fx-font-size: 14px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #2c3e50;
+}
+
+/* ==================== 图像区域 ==================== */
+.image-container {
+    -fx-background-color: white;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.2), 20, 0, 0, 5);
+    -fx-background-radius: 10;
+    -fx-padding: 20;
+}
+
+/* ==================== 状态栏 ==================== */
+.status-bar {
+    -fx-background-color: white;
+    -fx-border-color: #e0e0e0;
+    -fx-border-width: 1 0 0 0;
+}
+
+.status-label {
+    -fx-font-size: 13px;
+    -fx-text-fill: #6c757d;
+}
