@@ -5,6 +5,8 @@ import imgedit.core.exceptions.ImageProcessingException;
 import java.awt.image.BufferedImage;
 import java.awt.image.ConvolveOp;
 import java.awt.image.Kernel;
+import java.awt.Color;
+import java.awt.Graphics2D;
 
 /**
  * 图片风格化操作实现类
@@ -18,6 +20,7 @@ import java.awt.image.Kernel;
  * - 油画效果：区域颜色平均化 + 笔触模拟
  * - 水彩效果：边缘保留平滑 + 颜色扩散
  * - 素描效果：边缘检测 + 纹理叠加
+ * - 卡通效果：颜色量化 + 边缘增强
  */
 public class ArtisticStyleOperation implements ImageOperation {
 
@@ -269,17 +272,52 @@ public class ArtisticStyleOperation implements ImageOperation {
      * 边缘检测
      */
     private BufferedImage applyEdgeDetection(BufferedImage image) {
-        // Sobel算子
-        float[] kernel = {
+        // Sobel算子（水平和垂直）
+        float[] kernelX = {
                 -1, 0, 1,
                 -2, 0, 2,
                 -1, 0, 1
         };
 
-        Kernel sobelKernel = new Kernel(3, 3, kernel);
-        ConvolveOp convolveOp = new ConvolveOp(sobelKernel, ConvolveOp.EDGE_NO_OP, null);
+        float[] kernelY = {
+                -1, -2, -1,
+                0,  0,  0,
+                1,  2,  1
+        };
 
-        return convolveOp.filter(image, null);
+        Kernel sobelKernelX = new Kernel(3, 3, kernelX);
+        Kernel sobelKernelY = new Kernel(3, 3, kernelY);
+
+        ConvolveOp convolveOpX = new ConvolveOp(sobelKernelX, ConvolveOp.EDGE_NO_OP, null);
+        ConvolveOp convolveOpY = new ConvolveOp(sobelKernelY, ConvolveOp.EDGE_NO_OP, null);
+
+        BufferedImage edgeX = convolveOpX.filter(image, null);
+        BufferedImage edgeY = convolveOpY.filter(image, null);
+
+        // 合并X和Y方向的边缘
+        int width = image.getWidth();
+        int height = image.getHeight();
+        BufferedImage result = new BufferedImage(width, height, image.getType());
+
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                int pixelX = edgeX.getRGB(x, y);
+                int pixelY = edgeY.getRGB(x, y);
+
+                // 提取灰度值
+                int grayX = (pixelX >> 16) & 0xFF;
+                int grayY = (pixelY >> 16) & 0xFF;
+
+                // 计算梯度幅度
+                int gradient = (int)Math.sqrt(grayX * grayX + grayY * grayY);
+                gradient = Math.min(255, gradient);
+
+                int edgePixel = (255 << 24) | (gradient << 16) | (gradient << 8) | gradient;
+                result.setRGB(x, y, edgePixel);
+            }
+        }
+
+        return result;
     }
 
     /**
@@ -329,30 +367,329 @@ public class ArtisticStyleOperation implements ImageOperation {
         return textured;
     }
 
+    /**
+     * 应用水彩效果
+     */
     private BufferedImage applyWatercolorEffect(BufferedImage image) {
-        // 水彩效果实现（边缘保留平滑 + 颜色扩散）
         int width = image.getWidth();
         int height = image.getHeight();
-        BufferedImage result = new BufferedImage(width, height, image.getType());
 
-        // 简化实现：应用高斯模糊 + 增加饱和度
-        // TODO: 实现真正的水彩效果算法
+        // 步骤1：创建画布并复制原始图像
+        BufferedImage result = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g2d = result.createGraphics();
+        g2d.drawImage(image, 0, 0, null);
+        g2d.dispose();
+
+        // 步骤2：应用高斯模糊模拟水彩扩散
+        BufferedImage blurred = applyGaussianBlur(result, 2);
+
+        // 步骤3：边缘检测（获取边缘信息）
+        BufferedImage grayImage = applyGrayscale(result);
+        BufferedImage edges = applyEdgeDetection(grayImage);
+
+        // 步骤4：边缘保留混合
+        result = blendWatercolorWithEdges(blurred, edges);
+
+        // 步骤5：增加饱和度模拟水彩鲜艳效果
+        result = enhanceSaturation(result, 1.3f);
+
+        // 步骤6：轻微噪点模拟水彩画纸纹理
+        result = addWatercolorTexture(result);
+
         return result;
     }
 
+    /**
+     * 高斯模糊
+     */
+    private BufferedImage applyGaussianBlur(BufferedImage image, int radius) {
+        // 创建高斯核
+        int size = radius * 2 + 1;
+        float[] kernel = new float[size * size];
+        float sigma = radius / 2.0f;
+        float sum = 0.0f;
+
+        for (int y = -radius; y <= radius; y++) {
+            for (int x = -radius; x <= radius; x++) {
+                float value = (float)Math.exp(-(x*x + y*y) / (2 * sigma * sigma));
+                kernel[(y+radius) * size + (x+radius)] = value;
+                sum += value;
+            }
+        }
+
+        // 归一化
+        for (int i = 0; i < kernel.length; i++) {
+            kernel[i] /= sum;
+        }
+
+        Kernel gaussianKernel = new Kernel(size, size, kernel);
+        ConvolveOp convolveOp = new ConvolveOp(gaussianKernel, ConvolveOp.EDGE_NO_OP, null);
+
+        return convolveOp.filter(image, null);
+    }
+
+    /**
+     * 水彩边缘保留混合
+     */
+    private BufferedImage blendWatercolorWithEdges(BufferedImage colorImage, BufferedImage edgeImage) {
+        int width = colorImage.getWidth();
+        int height = colorImage.getHeight();
+        BufferedImage result = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                int color = colorImage.getRGB(x, y);
+                int edge = edgeImage.getRGB(x, y);
+
+                // 获取边缘强度
+                int edgeIntensity = (edge >> 16) & 0xFF;
+                float edgeFactor = edgeIntensity / 255.0f;
+
+                int r = (color >> 16) & 0xFF;
+                int g = (color >> 8) & 0xFF;
+                int b = color & 0xFF;
+
+                // 根据边缘强度调整颜色
+                if (edgeFactor > 0.2f) { // 边缘区域
+                    // 边缘稍微加深
+                    r = Math.max(0, r - 30);
+                    g = Math.max(0, g - 30);
+                    b = Math.max(0, b - 30);
+                } else { // 非边缘区域
+                    // 稍微提亮和柔化
+                    r = Math.min(255, r + 20);
+                    g = Math.min(255, g + 20);
+                    b = Math.min(255, b + 20);
+                }
+
+                int alpha = (color >> 24) & 0xFF;
+                result.setRGB(x, y, (alpha << 24) | (r << 16) | (g << 8) | b);
+            }
+        }
+
+        return result;
+    }
+
+    /**
+     * 增加饱和度
+     */
+    private BufferedImage enhanceSaturation(BufferedImage image, float saturationFactor) {
+        int width = image.getWidth();
+        int height = image.getHeight();
+        BufferedImage result = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                int color = image.getRGB(x, y);
+                int r = (color >> 16) & 0xFF;
+                int g = (color >> 8) & 0xFF;
+                int b = color & 0xFF;
+
+                // 转换为HSB颜色空间
+                float[] hsb = Color.RGBtoHSB(r, g, b, null);
+
+                // 增加饱和度
+                hsb[1] = Math.min(1.0f, hsb[1] * saturationFactor);
+
+                // 转换回RGB
+                int enhancedColor = Color.HSBtoRGB(hsb[0], hsb[1], hsb[2]);
+                int alpha = (color >> 24) & 0xFF;
+                result.setRGB(x, y, (alpha << 24) | (enhancedColor & 0x00FFFFFF));
+            }
+        }
+
+        return result;
+    }
+
+    /**
+     * 添加水彩纹理
+     */
+    private BufferedImage addWatercolorTexture(BufferedImage image) {
+        int width = image.getWidth();
+        int height = image.getHeight();
+        BufferedImage result = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                int color = image.getRGB(x, y);
+
+                // 添加轻微的不规则噪点，模拟水彩画纸
+                double noise = (Math.random() - 0.5) * 15;
+
+                int r = (color >> 16) & 0xFF;
+                int g = (color >> 8) & 0xFF;
+                int b = color & 0xFF;
+
+                r = (int)Math.max(0, Math.min(255, r + noise));
+                g = (int)Math.max(0, Math.min(255, g + noise));
+                b = (int)Math.max(0, Math.min(255, b + noise));
+
+                int alpha = (color >> 24) & 0xFF;
+                result.setRGB(x, y, (alpha << 24) | (r << 16) | (g << 8) | b);
+            }
+        }
+
+        return result;
+    }
+
+    /**
+     * 应用卡通效果 - 修复版本
+     */
     private BufferedImage applyCartoonEffect(BufferedImage image) {
-        // 卡通效果实现（颜色量化 + 边缘增强）
         int width = image.getWidth();
         int height = image.getHeight();
-        BufferedImage result = new BufferedImage(width, height, image.getType());
 
-        // 简化实现：减少颜色数量 + 边缘检测
-        // TODO: 实现真正的卡通效果算法
+        // 步骤1：颜色量化（减少颜色数量）
+        BufferedImage quantized = quantizeColors(image, 8);
+
+        // 步骤2：边缘检测（使用更精细的边缘检测）
+        BufferedImage edges = detectCartoonEdges(image);
+
+        // 步骤3：将量化图像与边缘混合
+        BufferedImage result = blendCartoonEffect(quantized, edges);
+
         return result;
     }
 
+    /**
+     * 检测卡通效果边缘 - 使用自适应阈值
+     */
+    private BufferedImage detectCartoonEdges(BufferedImage image) {
+        int width = image.getWidth();
+        int height = image.getHeight();
+
+        // 转为灰度
+        BufferedImage grayImage = applyGrayscale(image);
+
+        // 应用高斯模糊减少噪声
+        BufferedImage blurred = applyGaussianBlur(grayImage, 1);
+
+        // 应用边缘检测
+        BufferedImage edges = applyEdgeDetection(blurred);
+
+        // 自适应阈值处理 - 只保留较强的边缘
+        BufferedImage result = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+
+        // 计算边缘强度的平均值
+        long totalEdgeStrength = 0;
+        int pixelCount = 0;
+
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                int pixel = edges.getRGB(x, y);
+                int edgeStrength = (pixel >> 16) & 0xFF;
+                totalEdgeStrength += edgeStrength;
+                pixelCount++;
+            }
+        }
+
+        int averageEdgeStrength = (int)(totalEdgeStrength / pixelCount);
+        // 使用更高的阈值，避免太多像素被标记为边缘
+        int threshold = Math.min(100, averageEdgeStrength * 2);
+
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                int pixel = edges.getRGB(x, y);
+                int edgeStrength = (pixel >> 16) & 0xFF;
+
+                // 只有较强的边缘才被保留
+                if (edgeStrength > threshold) {
+                    // 黑色边缘
+                    result.setRGB(x, y, 0xFF000000);
+                } else {
+                    // 透明（无边缘）
+                    result.setRGB(x, y, 0x00000000);
+                }
+            }
+        }
+
+        return result;
+    }
+
+    /**
+     * 颜色量化
+     */
+    private BufferedImage quantizeColors(BufferedImage image, int colorLevels) {
+        int width = image.getWidth();
+        int height = image.getHeight();
+        BufferedImage result = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+
+        // 计算量化步长
+        int step = 256 / colorLevels;
+
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                int color = image.getRGB(x, y);
+                int r = (color >> 16) & 0xFF;
+                int g = (color >> 8) & 0xFF;
+                int b = color & 0xFF;
+
+                // 量化每个颜色通道
+                r = (r / step) * step;
+                g = (g / step) * step;
+                b = (b / step) * step;
+
+                // 确保在0-255范围内
+                r = Math.min(255, r);
+                g = Math.min(255, g);
+                b = Math.min(255, b);
+
+                // 稍微增加对比度使颜色更鲜艳
+                r = enhanceContrast(r);
+                g = enhanceContrast(g);
+                b = enhanceContrast(b);
+
+                int alpha = (color >> 24) & 0xFF;
+                result.setRGB(x, y, (alpha << 24) | (r << 16) | (g << 8) | b);
+            }
+        }
+
+        return result;
+    }
+
+    /**
+     * 增强对比度
+     */
+    private int enhanceContrast(int value) {
+        // 简单的对比度增强：将值映射到更宽的动态范围
+        float factor = 1.2f;
+        int result = (int)((value - 128) * factor + 128);
+        return Math.max(0, Math.min(255, result));
+    }
+
+    /**
+     * 混合卡通效果
+     */
+    private BufferedImage blendCartoonEffect(BufferedImage colorImage, BufferedImage edgeImage) {
+        int width = colorImage.getWidth();
+        int height = colorImage.getHeight();
+        BufferedImage result = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                int color = colorImage.getRGB(x, y);
+                int edge = edgeImage.getRGB(x, y);
+
+                // 检查边缘像素（alpha通道不为0表示有边缘）
+                int alpha = (edge >> 24) & 0xFF;
+
+                if (alpha > 0) {
+                    // 有边缘：使用黑色但稍微透明
+                    result.setRGB(x, y, 0x80000000); // 半透明黑色
+                } else {
+                    // 无边缘：使用量化颜色
+                    result.setRGB(x, y, color);
+                }
+            }
+        }
+
+        return result;
+    }
+
+    /**
+     * 应用马赛克艺术效果
+     */
     private BufferedImage applyMosaicArtEffect(BufferedImage image) {
-        // 马赛克艺术效果
         int width = image.getWidth();
         int height = image.getHeight();
         int blockSize = parameters.brushSize;

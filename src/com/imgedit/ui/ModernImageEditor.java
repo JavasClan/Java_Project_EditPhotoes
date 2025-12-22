@@ -1115,10 +1115,10 @@ public class ModernImageEditor extends Application {
         applyOperation(operation, "调整对比度");
     }
 
-    private void adjustSaturation(double value) {
-        // 饱和度调整暂时使用对比度模拟
-        adjustContrast(value * 0.5);
-    }
+//    private void adjustSaturation(double value) {
+//        // 饱和度调整暂时使用对比度模拟
+//        adjustContrast(value * 0.5);
+//    }
 
     private void applyBlur(double value) {
         if (currentImage == null || imageEditorService == null || value == 0) return;
