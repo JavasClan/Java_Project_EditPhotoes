@@ -20,6 +20,7 @@ import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Circle;
 import javafx.scene.text.Font;
+import javafx.stage.DirectoryChooser;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 import javafx.util.Duration;
@@ -27,10 +28,12 @@ import javafx.util.Duration;
 import java.awt.Rectangle;
 import java.awt.image.BufferedImage;
 import java.io.File;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 
 import javafx.scene.Node;
 import javafx.scene.input.KeyCode;
@@ -39,8 +42,15 @@ import javafx.scene.input.KeyCombination;
 
 import javax.imageio.ImageIO;
 
+// 添加豆包图生图API相关导入
+import org.apache.commons.io.FileUtils;
+import org.apache.commons.codec.binary.Base64;
+import java.util.concurrent.TimeUnit;
+import java.util.regex.Pattern;
+import java.io.IOException;
+
 /**
- * 现代化图像编辑器 - 支持多种高级主题
+ * 现代化图像编辑器 - 支持多种高级主题 + 豆包图生图功能
  */
 public class ModernImageEditor extends Application {
 
@@ -72,8 +82,7 @@ public class ModernImageEditor extends Application {
     // 状态
     private double currentZoom = 1.0;
 
-
-    // 添加交互状态
+    // 交互状态
     private enum ToolMode {
         SELECT,       // 选择模式
         CROP,         // 裁剪模式
@@ -126,9 +135,17 @@ public class ModernImageEditor extends Application {
     private Theme currentTheme = Theme.LIGHT_MODE;
     private Map<Theme, String> themeStyles = new HashMap<>();
 
+    // 豆包图生图配置
+    private Properties arkConfig;
+    private boolean arkAvailable = false;
+
     @Override
     public void start(Stage stage) {
         this.primaryStage = stage;
+
+        // 加载豆包图生图配置
+        loadArkConfig();
+
         initializeThemes();
 
         // 显示启动动画
@@ -138,52 +155,79 @@ public class ModernImageEditor extends Application {
     }
 
     /**
+     * 加载豆包图生图配置
+     */
+    private void loadArkConfig() {
+        try {
+            arkConfig = new Properties();
+            InputStream is = getClass().getClassLoader().getResourceAsStream("config.properties");
+            if (is != null) {
+                arkConfig.load(is);
+
+                // 检查配置是否可用
+                String apiKey = arkConfig.getProperty("ark.api.key");
+                String baseUrl = arkConfig.getProperty("ark.base.url");
+                String modelId = arkConfig.getProperty("ark.model.id");
+
+                arkAvailable = apiKey != null && !apiKey.trim().isEmpty() &&
+                        baseUrl != null && !baseUrl.trim().isEmpty() &&
+                        modelId != null && !modelId.trim().isEmpty();
+
+                if (arkAvailable) {
+                    System.out.println("豆包图生图配置加载成功");
+                } else {
+                    System.err.println("豆包图生图配置不完整");
+                }
+            } else {
+                System.err.println("未找到config.properties文件");
+                arkAvailable = false;
+            }
+        } catch (Exception e) {
+            System.err.println("加载豆包图生图配置失败: " + e.getMessage());
+            arkAvailable = false;
+        }
+    }
+
+    /**
      * 初始化所有主题样式
      */
     private void initializeThemes() {
-        // 浅色模式
+        // ... 现有代码保持不变 ...
         themeStyles.put(Theme.LIGHT_MODE,
                 "-fx-background-color: #f5f7fa; " +
                         "-fx-text-fill: #2c3e50;"
         );
 
-        // 深色模式
         themeStyles.put(Theme.DARK_MODE,
                 "-fx-background-color: #121212; " +
                         "-fx-text-fill: #e0e0e0;"
         );
 
-        // 蓝色之夜主题
         themeStyles.put(Theme.BLUE_NIGHT,
                 "-fx-background-color: #0f172a; " +
                         "-fx-text-fill: #e2e8f0;"
         );
 
-        // 绿色森林主题
         themeStyles.put(Theme.GREEN_FOREST,
                 "-fx-background-color: #022c22; " +
                         "-fx-text-fill: #d1fae5;"
         );
 
-        // 紫色梦幻主题
         themeStyles.put(Theme.PURPLE_DREAM,
                 "-fx-background-color: #1e1b4b; " +
                         "-fx-text-fill: #e9d5ff;"
         );
 
-        // 橙色日落主题
         themeStyles.put(Theme.ORANGE_SUNSET,
                 "-fx-background-color: #431407; " +
                         "-fx-text-fill: #fed7aa;"
         );
 
-        // 粉色花语主题
         themeStyles.put(Theme.PINK_BLOSSOM,
                 "-fx-background-color: #500724; " +
                         "-fx-text-fill: #fbcfe8;"
         );
 
-        // 赛博朋克主题
         themeStyles.put(Theme.CYBERPUNK,
                 "-fx-background-color: #000000; " +
                         "-fx-text-fill: #00ff41;"
@@ -194,20 +238,13 @@ public class ModernImageEditor extends Application {
      * 应用当前主题
      */
     private void applyTheme(Theme theme) {
+        // ... 现有代码保持不变 ...
         currentTheme = theme;
 
-        // 获取当前主题的样式
         String style = themeStyles.get(theme);
-
-        // 应用主题到根布局
         root.setStyle(style);
-
-        // 更新各个面板的样式
         updatePanelStyles(theme);
-
         updateStatus("已切换主题: " + theme.getDisplayName());
-
-        // 播放主题切换动画
         playThemeSwitchAnimation();
     }
 
@@ -215,13 +252,13 @@ public class ModernImageEditor extends Application {
      * 更新所有面板的样式
      */
     private void updatePanelStyles(Theme theme) {
+        // ... 现有代码保持不变 ...
         String panelStyle = "";
         String buttonStyle = "";
         String sectionStyle = "";
         String infoBoxStyle = "";
         String listStyle = "";
 
-        // 根据主题设置不同的样式
         switch (theme) {
             case LIGHT_MODE:
                 panelStyle = "-fx-background-color: white;";
@@ -296,7 +333,6 @@ public class ModernImageEditor extends Application {
                 break;
         }
 
-        // 应用样式到各个面板
         if (leftPanel != null) {
             leftPanel.setStyle(panelStyle);
             updatePanelComponents(leftPanel, theme);
@@ -306,18 +342,15 @@ public class ModernImageEditor extends Application {
             updatePanelComponents(rightPanel, theme);
         }
 
-        // 更新历史列表
         if (historyListView != null) {
             historyListView.setStyle(listStyle);
         }
 
-        // 更新状态栏
         HBox bottomBar = (HBox) root.getBottom();
         if (bottomBar != null) {
             bottomBar.setStyle(panelStyle);
         }
 
-        // 更新顶部工具栏
         HBox topBar = (HBox) root.getTop();
         if (topBar != null) {
             topBar.setStyle(panelStyle);
@@ -328,6 +361,7 @@ public class ModernImageEditor extends Application {
      * 更新面板内的组件样式
      */
     private void updatePanelComponents(VBox panel, Theme theme) {
+        // ... 现有代码保持不变 ...
         for (Node node : panel.getChildren()) {
             if (node instanceof Label) {
                 Label label = (Label) node;
@@ -335,7 +369,6 @@ public class ModernImageEditor extends Application {
                 if (text.contains("🎛") || text.contains("🔄") || text.contains("✨") ||
                         text.contains("🤖") || text.contains("📜") || text.contains("ℹ️") ||
                         text.contains("⚡") || text.contains("✏️") || text.contains("✂️")) {
-                    // 这是section label
                     updateSectionLabelStyle(label, theme);
                 }
             } else if (node instanceof Button) {
@@ -352,6 +385,7 @@ public class ModernImageEditor extends Application {
      * 更新分段标签样式
      */
     private void updateSectionLabelStyle(Label label, Theme theme) {
+        // ... 现有代码保持不变 ...
         String style;
         switch (theme) {
             case LIGHT_MODE: style = "-fx-text-fill: #2c3e50;"; break;
@@ -371,6 +405,7 @@ public class ModernImageEditor extends Application {
      * 更新按钮样式
      */
     private void updateButtonStyle(Button button, Theme theme) {
+        // ... 现有代码保持不变 ...
         String style;
         switch (theme) {
             case LIGHT_MODE:
@@ -416,6 +451,7 @@ public class ModernImageEditor extends Application {
      * 更新分隔符样式
      */
     private void updateSeparatorStyle(Separator separator, Theme theme) {
+        // ... 现有代码保持不变 ...
         String style;
         switch (theme) {
             case LIGHT_MODE: style = "-fx-background-color: #dee2e6;"; break;
@@ -435,6 +471,7 @@ public class ModernImageEditor extends Application {
      * 播放主题切换动画
      */
     private void playThemeSwitchAnimation() {
+        // ... 现有代码保持不变 ...
         FadeTransition fadeOut = new FadeTransition(Duration.millis(150), root);
         fadeOut.setFromValue(1.0);
         fadeOut.setToValue(0.7);
@@ -451,6 +488,7 @@ public class ModernImageEditor extends Application {
      * 启动画面
      */
     private void showSplashScreen(Runnable onComplete) {
+        // ... 现有代码保持不变 ...
         Stage splashStage = new Stage();
 
         VBox splashRoot = new VBox(30);
@@ -458,7 +496,6 @@ public class ModernImageEditor extends Application {
         splashRoot.setPrefSize(500, 350);
         splashRoot.setStyle("-fx-background-color: linear-gradient(from 0% 0% to 100% 100%, #667eea 0%, #764ba2 100%);");
 
-        // Logo图标
         Circle logoCircle = new Circle(50);
         logoCircle.setFill(Color.WHITE);
         logoCircle.setEffect(new DropShadow(30, Color.rgb(0, 0, 0, 0.3)));
@@ -468,14 +505,12 @@ public class ModernImageEditor extends Application {
 
         StackPane logoPane = new StackPane(logoCircle, logoIcon);
 
-        // 标题
         Label titleLabel = new Label("AI Image Editor Pro");
         titleLabel.setStyle("-fx-font-size: 32px; -fx-font-weight: bold; -fx-text-fill: white;");
 
         Label subtitleLabel = new Label("Professional Image Processing Suite");
         subtitleLabel.setStyle("-fx-font-size: 14px; -fx-text-fill: rgba(255,255,255,0.8);");
 
-        // 加载进度条
         ProgressBar progressBar = new ProgressBar();
         progressBar.setPrefWidth(300);
         progressBar.setStyle("-fx-accent: white;");
@@ -490,13 +525,11 @@ public class ModernImageEditor extends Application {
         splashStage.setAlwaysOnTop(true);
         splashStage.show();
 
-        // 动画效果
         FadeTransition fadeIn = new FadeTransition(Duration.millis(800), splashRoot);
         fadeIn.setFromValue(0);
         fadeIn.setToValue(1);
         fadeIn.play();
 
-        // 模拟加载
         Timeline timeline = new Timeline(
                 new KeyFrame(Duration.seconds(2.5), e -> {
                     FadeTransition fadeOut = new FadeTransition(Duration.millis(500), splashRoot);
@@ -557,7 +590,7 @@ public class ModernImageEditor extends Application {
      * 设置快捷键
      */
     private void setupShortcuts(BorderPane root) {
-        // 主题切换快捷键
+        // ... 现有代码保持不变 ...
         Scene scene = primaryStage.getScene();
 
         // Ctrl+T 切换主题
@@ -587,11 +620,11 @@ public class ModernImageEditor extends Application {
      * 显示主题选择器
      */
     private void showThemeSelector() {
+        // ... 现有代码保持不变 ...
         Dialog<Theme> dialog = new Dialog<>();
         dialog.setTitle("选择主题");
         dialog.setHeaderText("选择界面主题");
 
-        // 创建主题选择器
         VBox content = new VBox(10);
         content.setPadding(new Insets(20));
         content.setAlignment(Pos.CENTER);
@@ -599,7 +632,6 @@ public class ModernImageEditor extends Application {
         Label titleLabel = new Label("🎨 选择主题");
         titleLabel.setStyle("-fx-font-size: 18px; -fx-font-weight: bold;");
 
-        // 创建主题网格
         GridPane themeGrid = new GridPane();
         themeGrid.setHgap(15);
         themeGrid.setVgap(15);
@@ -629,6 +661,7 @@ public class ModernImageEditor extends Application {
      * 创建主题预览
      */
     private VBox createThemePreview(Theme theme) {
+        // ... 现有代码保持不变 ...
         VBox preview = new VBox(10);
         preview.setAlignment(Pos.CENTER);
         preview.setPadding(new Insets(15));
@@ -640,11 +673,9 @@ public class ModernImageEditor extends Application {
                 "-fx-background-color: rgba(0,0,0,0.05); -fx-background-radius: 10;"
         ));
 
-        // 主题颜色示例
         HBox colorSample = new HBox(5);
         colorSample.setAlignment(Pos.CENTER);
 
-        // 根据主题类型显示不同颜色
         Color[] colors = getThemeColors(theme);
         for (Color color : colors) {
             Circle colorCircle = new Circle(12);
@@ -663,6 +694,7 @@ public class ModernImageEditor extends Application {
      * 获取主题颜色
      */
     private Color[] getThemeColors(Theme theme) {
+        // ... 现有代码保持不变 ...
         switch (theme) {
             case LIGHT_MODE:
                 return new Color[]{
@@ -701,12 +733,11 @@ public class ModernImageEditor extends Application {
         }
     }
 
-    // 修改 createTopBar() 方法，添加主题选择器
+    // 修改 createTopBar() 方法
     private HBox createTopBar() {
         HBox topBar = new HBox(15);
         topBar.setPadding(new Insets(15, 20, 15, 20));
         topBar.setAlignment(Pos.CENTER_LEFT);
-        // 初始样式将在主题应用时设置
 
         // Logo和标题
         Label logo = new Label("🎨");
@@ -755,6 +786,7 @@ public class ModernImageEditor extends Application {
         return topBar;
     }
 
+    // 修改 createLeftPanel() 方法，在AI功能部分添加豆包图生图按钮
     /**
      * 创建左侧工具面板 - 增强交互功能
      */
@@ -864,20 +896,28 @@ public class ModernImageEditor extends Application {
 
         Separator sep6 = new Separator();
 
-        // AI功能
-//        Label aiLabel = createSectionLabel("🤖 AI增强");
+        // AI功能 - 添加豆包图生图按钮
+        Label aiLabel = createSectionLabel("🤖 AI增强");
 
-//        Button aiEnhanceBtn = new Button("✨ AI增强");
-//        aiEnhanceBtn.setPrefWidth(Double.MAX_VALUE);
-//        aiEnhanceBtn.setOnAction(e -> aiEnhance());
+        Button aiEnhanceBtn = new Button("✨ AI增强");
+        aiEnhanceBtn.setPrefWidth(Double.MAX_VALUE);
+        aiEnhanceBtn.setOnAction(e -> aiEnhance());
 
-//        Button removeBackground = new Button("🖼 移除背景");
-//        removeBackground.setPrefWidth(Double.MAX_VALUE);
-//        removeBackground.setOnAction(e -> removeBackground());
+        Button removeBackground = new Button("🖼 移除背景");
+        removeBackground.setPrefWidth(Double.MAX_VALUE);
+        removeBackground.setOnAction(e -> removeBackground());
 
         Button artisticStyle = new Button("🎨 艺术风格");
         artisticStyle.setPrefWidth(Double.MAX_VALUE);
         artisticStyle.setOnAction(e -> applyArtisticStyle());
+
+        // 豆包图生图按钮（仅在配置可用时显示）
+        Button arkImageGenBtn = null;
+        if (arkAvailable) {
+            arkImageGenBtn = new Button("🖼 豆包图生图");
+            arkImageGenBtn.setPrefWidth(Double.MAX_VALUE);
+            arkImageGenBtn.setOnAction(e -> showArkImageGenerationDialog());
+        }
 
         leftPanel.getChildren().addAll(
                 basicLabel, adjustmentPanel,
@@ -885,8 +925,13 @@ public class ModernImageEditor extends Application {
                 sep2, batchLabel, batchBtn,
                 sep3, transformLabel, transformButtons,
                 sep4, filterLabel, blurControl, grayscaleBtn, edgeDetectBtn,
-                sep5, artisticStyle
+                sep5, aiLabel, aiEnhanceBtn, removeBackground, artisticStyle
         );
+
+        // 添加豆包图生图按钮（如果可用）
+        if (arkImageGenBtn != null) {
+            leftPanel.getChildren().add(arkImageGenBtn);
+        }
 
         ScrollPane scrollPane = new ScrollPane(leftPanel);
         scrollPane.setFitToWidth(true);
@@ -894,6 +939,351 @@ public class ModernImageEditor extends Application {
 
         return scrollPane;
     }
+
+    /**
+     * 显示豆包图生图对话框
+     */
+    private void showArkImageGenerationDialog() {
+        if (!arkAvailable) {
+            showError("功能不可用", "豆包图生图配置不可用，请检查config.properties文件");
+            return;
+        }
+
+        if (currentImageFile == null) {
+            showError("错误", "请先加载一张图片作为原图");
+            return;
+        }
+
+        Dialog<Void> dialog = new Dialog<>();
+        dialog.setTitle("豆包图生图");
+        dialog.setHeaderText("基于当前图片进行AI图生图创作");
+
+        // 创建对话框内容
+        VBox content = new VBox(15);
+        content.setPadding(new Insets(20));
+        content.setPrefWidth(500);
+
+        // 原图信息
+        HBox sourceInfo = new HBox(10);
+        sourceInfo.setAlignment(Pos.CENTER_LEFT);
+
+        Label sourceLabel = new Label("原图:");
+        sourceLabel.setStyle("-fx-font-weight: bold;");
+
+        String sourceText = currentImageFile.getName();
+        Label sourceFileLabel = new Label(sourceText);
+        sourceFileLabel.setStyle("-fx-font-size: 12px; -fx-text-fill: #666;");
+
+        sourceInfo.getChildren().addAll(sourceLabel, sourceFileLabel);
+
+        // 提示词输入
+        Label promptLabel = new Label("创作指令:");
+        promptLabel.setStyle("-fx-font-weight: bold;");
+
+        TextArea promptArea = new TextArea();
+        promptArea.setPromptText("请输入图生图创作指令，例如：添加星空背景、转换为卡通风格等...");
+        promptArea.setWrapText(true);
+        promptArea.setPrefRowCount(3);
+        promptArea.setPrefColumnCount(40);
+
+        // 输出设置
+        VBox outputSettings = new VBox(10);
+        outputSettings.setStyle("-fx-background-color: #f5f5f5; -fx-background-radius: 8; -fx-padding: 15;");
+
+        Label outputLabel = new Label("输出设置:");
+        outputLabel.setStyle("-fx-font-weight: bold; -fx-font-size: 14px;");
+
+        // 保存目录
+        HBox saveDirBox = new HBox(10);
+        saveDirBox.setAlignment(Pos.CENTER_LEFT);
+
+        Label dirLabel = new Label("保存目录:");
+        TextField dirField = new TextField("D:/generated_images/");
+        dirField.setPrefWidth(300);
+
+        Button browseDirBtn = new Button("浏览");
+        browseDirBtn.setOnAction(e -> {
+            DirectoryChooser dirChooser = new DirectoryChooser();
+            dirChooser.setTitle("选择保存目录");
+            File selectedDir = dirChooser.showDialog(primaryStage);
+            if (selectedDir != null) {
+                dirField.setText(selectedDir.getAbsolutePath());
+            }
+        });
+
+        saveDirBox.getChildren().addAll(dirLabel, dirField, browseDirBtn);
+
+        // 文件名
+        HBox fileNameBox = new HBox(10);
+        fileNameBox.setAlignment(Pos.CENTER_LEFT);
+
+        Label nameLabel = new Label("文件名:");
+        TextField nameField = new TextField("generated_image");
+        nameField.setPrefWidth(200);
+
+        fileNameBox.getChildren().addAll(nameLabel, nameField);
+
+        outputSettings.getChildren().addAll(outputLabel, saveDirBox, fileNameBox);
+
+        // 状态信息
+        Label statusLabel = new Label();
+        statusLabel.setStyle("-fx-font-size: 12px; -fx-text-fill: #666;");
+
+        // 进度条
+        ProgressBar progressBar = new ProgressBar();
+        progressBar.setVisible(false);
+        progressBar.setPrefWidth(400);
+
+        content.getChildren().addAll(sourceInfo, promptLabel, promptArea, outputSettings, statusLabel, progressBar);
+
+        // 对话框按钮
+        Button generateBtn = new Button("🖼 开始生成");
+        generateBtn.setStyle("-fx-background-color: #4CAF50; -fx-text-fill: white; -fx-font-weight: bold;");
+
+        Button cancelBtn = new Button("取消");
+        cancelBtn.setOnAction(e -> dialog.close());
+
+        HBox buttonBox = new HBox(15);
+        buttonBox.setAlignment(Pos.CENTER_RIGHT);
+        buttonBox.getChildren().addAll(cancelBtn, generateBtn);
+
+        content.getChildren().add(buttonBox);
+
+        // 生成按钮事件
+        generateBtn.setOnAction(e -> {
+            String prompt = promptArea.getText().trim();
+            if (prompt.isEmpty()) {
+                showError("错误", "请输入创作指令");
+                return;
+            }
+
+            String saveDir = dirField.getText().trim();
+            if (saveDir.isEmpty()) {
+                saveDir = "D:/generated_images/";
+            }
+
+            String fileName = nameField.getText().trim();
+            if (fileName.isEmpty()) {
+                fileName = "generated_image";
+            }
+
+            // 更新状态
+            statusLabel.setText("正在生成图片...");
+            progressBar.setVisible(true);
+            progressBar.setProgress(ProgressBar.INDETERMINATE_PROGRESS);
+            generateBtn.setDisable(true);
+
+            // 在UI线程中执行图生图（使用Platform.runLater确保UI响应）
+            String finalSaveDir = saveDir;
+            String finalFileName = fileName;
+            new Thread(() -> {
+                try {
+                    // 调用豆包图生图功能
+                    String result = generateArkImage(
+                            currentImageFile.getAbsolutePath(),
+                            prompt,
+                            finalSaveDir,
+                            finalFileName
+                    );
+
+                    Platform.runLater(() -> {
+                        statusLabel.setText("图片生成成功！");
+                        progressBar.setVisible(false);
+                        generateBtn.setDisable(false);
+
+                        // 询问是否打开生成的图片
+                        Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
+                        alert.setTitle("生成成功");
+                        alert.setHeaderText("图片生成成功！");
+                        alert.setContentText("图片已保存到: " + result + "\n\n是否打开生成的图片？");
+
+                        alert.showAndWait().ifPresent(response -> {
+                            if (response == ButtonType.OK) {
+                                File generatedFile = new File(result);
+                                if (generatedFile.exists()) {
+                                    loadImage(generatedFile);
+                                    dialog.close();
+                                }
+                            }
+                        });
+                    });
+                } catch (Exception ex) {
+                    Platform.runLater(() -> {
+                        statusLabel.setText("生成失败: " + ex.getMessage());
+                        progressBar.setVisible(false);
+                        generateBtn.setDisable(false);
+                        showError("生成失败", ex.getMessage());
+                    });
+                }
+            }).start();
+        });
+
+        dialog.getDialogPane().setContent(content);
+        dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
+        dialog.showAndWait();
+    }
+
+    /**
+     * 执行豆包图生图生成
+     */
+    private String generateArkImage(String imagePath, String prompt, String saveDir, String fileName) throws Exception {
+        // 从配置中获取参数
+        String apiKey = arkConfig.getProperty("ark.api.key");
+        String baseUrl = arkConfig.getProperty("ark.base.url");
+        String modelId = arkConfig.getProperty("ark.model.id");
+
+        if (apiKey == null || apiKey.trim().isEmpty()) {
+            throw new Exception("API Key 未配置");
+        }
+
+        // 1. 图片转标准Base64
+        String imageBase64 = imageToBase64(imagePath);
+
+        // 2. 构建ArkService
+        okhttp3.ConnectionPool connectionPool = new okhttp3.ConnectionPool(5, 1, TimeUnit.SECONDS);
+        okhttp3.Dispatcher dispatcher = new okhttp3.Dispatcher();
+        com.volcengine.ark.runtime.service.ArkService service = com.volcengine.ark.runtime.service.ArkService.builder()
+                .baseUrl(baseUrl)
+                .dispatcher(dispatcher)
+                .connectionPool(connectionPool)
+                .apiKey(apiKey)
+                .build();
+
+        try {
+            // 3. 构建图生图请求
+            com.volcengine.ark.runtime.model.images.generation.GenerateImagesRequest generateRequest =
+                    com.volcengine.ark.runtime.model.images.generation.GenerateImagesRequest.builder()
+                            .model(modelId)
+                            .prompt(prompt)
+                            .image(imageBase64)
+                            .size("2K")
+                            .sequentialImageGeneration("disabled")
+                            .responseFormat(com.volcengine.ark.runtime.model.images.generation.ResponseFormat.Url)
+                            .stream(false)
+                            .watermark(false)
+                            .build();
+
+            // 4. 调用API
+            System.out.println("正在调用豆包图生图API...");
+            com.volcengine.ark.runtime.model.images.generation.ImagesResponse imagesResponse =
+                    service.generateImages(generateRequest);
+
+            if (imagesResponse.getData() != null && !imagesResponse.getData().isEmpty()) {
+                String imageUrl = imagesResponse.getData().get(0).getUrl();
+                System.out.println("图生图成功！生成的图片URL：" + imageUrl);
+
+                // 5. 下载并保存图片
+                return downloadArkImage(imageUrl, saveDir, fileName);
+            } else {
+                throw new Exception("生成结果为空");
+            }
+        } finally {
+            service.shutdownExecutor();
+        }
+    }
+
+    /**
+     * 本地图片转标准Base64
+     */
+    private String imageToBase64(String imagePath) throws IOException {
+        File imageFile = new File(imagePath);
+        if (!imageFile.exists()) {
+            throw new IOException("图片文件不存在：" + imagePath);
+        }
+
+        // 校验图片大小（≤10MB）
+        long fileSizeMB = imageFile.length() / (1024 * 1024);
+        if (fileSizeMB > 10) {
+            throw new IOException("图片大小超过10MB限制，当前：" + fileSizeMB + "MB");
+        }
+
+        // 读取图片字节
+        byte[] imageBytes = FileUtils.readFileToByteArray(imageFile);
+        // 提取图片格式
+        String imageFormat = getImageFormat(imagePath);
+        // 拼接标准Base64前缀
+        return "data:image/" + imageFormat + ";base64," + Base64.encodeBase64String(imageBytes);
+    }
+
+    /**
+     * 提取图片格式
+     */
+    private String getImageFormat(String imagePath) {
+        String suffix = imagePath.substring(imagePath.lastIndexOf(".") + 1).toLowerCase();
+        return "jpeg".equals(suffix) ? "jpg" : suffix;
+    }
+
+    /**
+     * 过滤非法文件名字符
+     */
+    private String filterIllegalFileName(String fileName) {
+        String illegalChars = "[\\\\/:*?\"<>|]";
+        Pattern pattern = Pattern.compile(illegalChars);
+        return pattern.matcher(fileName).replaceAll("_");
+    }
+
+    /**
+     * 从URL中提取纯图片路径
+     */
+    private String getPureImageUrl(String imageUrl) {
+        if (imageUrl.contains("?")) {
+            return imageUrl.split("\\?")[0];
+        }
+        return imageUrl;
+    }
+
+    /**
+     * 下载图片并保存到本地
+     */
+    private String downloadArkImage(String imageUrl, String saveDir, String fileName) throws IOException {
+        // 1. 处理URL：去掉TOS签名参数
+        String pureImageUrl = getPureImageUrl(imageUrl);
+
+        // 2. 创建保存目录
+        File dir = new File(saveDir);
+        if (!dir.exists()) {
+            boolean mkdirSuccess = dir.mkdirs();
+            if (!mkdirSuccess) {
+                throw new IOException("创建保存目录失败：" + saveDir);
+            }
+        }
+
+        // 3. 构建OkHttpClient
+        okhttp3.OkHttpClient client = new okhttp3.OkHttpClient.Builder()
+                .connectTimeout(30, TimeUnit.SECONDS)
+                .readTimeout(30, TimeUnit.SECONDS)
+                .build();
+
+        // 4. 发送请求下载图片
+        okhttp3.Request request = new okhttp3.Request.Builder()
+                .url(imageUrl)
+                .get()
+                .build();
+
+        try (okhttp3.Response response = client.newCall(request).execute()) {
+            if (!response.isSuccessful()) {
+                throw new IOException("下载图片失败，HTTP状态码：" + response.code());
+            }
+
+            // 5. 提取图片格式
+            String imageFormat = pureImageUrl.substring(pureImageUrl.lastIndexOf(".") + 1).toLowerCase();
+            // 过滤文件名中的非法字符
+            String safeFileName = filterIllegalFileName(fileName);
+            // 补全文件名后缀
+            String fullFileName = safeFileName.endsWith("." + imageFormat)
+                    ? safeFileName
+                    : safeFileName + "." + imageFormat;
+            // 拼接最终保存路径
+            File saveFile = new File(dir, fullFileName);
+
+            // 6. 写入文件
+            try (java.io.InputStream inputStream = response.body().byteStream()) {
+                FileUtils.copyInputStreamToFile(inputStream, saveFile);
+            }
+            return saveFile.getAbsolutePath();
+        }
+    }
+
 
     /**
      * 创建绘图设置面板 - 修复清除按钮问题
