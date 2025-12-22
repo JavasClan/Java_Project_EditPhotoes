@@ -10,6 +10,8 @@ import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
+import javafx.scene.canvas.Canvas;
+import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.control.*;
 import javafx.scene.effect.*;
 import javafx.scene.image.Image;
@@ -17,6 +19,7 @@ import javafx.scene.image.ImageView;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Circle;
+import javafx.scene.text.Font;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 import javafx.util.Duration;
@@ -68,6 +71,35 @@ public class ModernImageEditor extends Application {
 
     // 状态
     private double currentZoom = 1.0;
+
+
+    // 添加交互状态
+    private enum ToolMode {
+        SELECT,       // 选择模式
+        CROP,         // 裁剪模式
+        DRAW_BRUSH,   // 画笔模式
+        DRAW_TEXT,    // 文字模式
+        DRAW_RECT,    // 矩形模式
+        DRAW_CIRCLE   // 圆形模式
+    }
+
+    private ToolMode currentToolMode = ToolMode.SELECT;
+
+    // 裁剪相关变量
+    private Rectangle cropSelection = null;
+    private boolean isSelectingCrop = false;
+    private double cropStartX, cropStartY;
+
+    // 绘图相关变量
+    private List<DrawingOperation.DrawingPoint> currentBrushPoints = new ArrayList<>();
+    private DrawingOperation.BrushStyle currentBrushStyle = new DrawingOperation.BrushStyle(
+            java.awt.Color.BLACK, 3, 1.0f);
+
+    // 颜色选择
+    private ColorPicker colorPicker;
+
+    // 画笔粗细
+    private Spinner<Integer> brushSizeSpinner;
 
     // 主题管理
     private enum Theme {
@@ -724,48 +756,65 @@ public class ModernImageEditor extends Application {
     }
 
     /**
-     * 创建左侧工具面板 - 添加绘图、裁剪、批量处理功能
+     * 创建左侧工具面板 - 增强交互功能
      */
     private ScrollPane createLeftPanel() {
         leftPanel = new VBox(20);
         leftPanel.setPadding(new Insets(20));
         leftPanel.setPrefWidth(280);
-        // 初始样式将在主题应用时设置
 
         // 基础调整
         Label basicLabel = createSectionLabel("🎛 基础调整");
-
-        // 创建高级调整面板
         VBox adjustmentPanel = createAdvancedAdjustmentPanel();
 
         Separator sep1 = new Separator();
 
-        // 绘图工具
-        Label drawingLabel = createSectionLabel("✏️ 绘图工具");
-        FlowPane drawingButtons = new FlowPane(10, 10);
-        drawingButtons.setAlignment(Pos.CENTER_LEFT);
+        // 交互工具选择
+        Label toolsLabel = createSectionLabel("🛠️ 交互工具");
 
-        Button textBtn = createOperationButton("A 文字");
-        textBtn.setOnAction(e -> addText());
+        // 工具选择按钮组
+        ToggleGroup toolGroup = new ToggleGroup();
 
-        Button brushBtn = createOperationButton("🖌 画笔");
-        brushBtn.setOnAction(e -> startDrawing());
+        ToggleButton selectTool = new ToggleButton("👆 选择");
+        selectTool.setToggleGroup(toolGroup);
+        selectTool.setSelected(true);
+        selectTool.setOnAction(e -> setToolMode(ToolMode.SELECT));
 
-        Button rectangleBtn = createOperationButton("⬜ 矩形");
-        rectangleBtn.setOnAction(e -> drawRectangle());
+        ToggleButton cropTool = new ToggleButton("✂️ 裁剪");
+        cropTool.setToggleGroup(toolGroup);
+        cropTool.setOnAction(e -> setToolMode(ToolMode.CROP));
 
-        Button circleBtn = createOperationButton("⭕ 圆形");
-        circleBtn.setOnAction(e -> drawCircle());
+        ToggleButton brushTool = new ToggleButton("🖌️ 画笔");
+        brushTool.setToggleGroup(toolGroup);
+        brushTool.setOnAction(e -> setToolMode(ToolMode.DRAW_BRUSH));
 
-        drawingButtons.getChildren().addAll(textBtn, brushBtn, rectangleBtn, circleBtn);
+        ToggleButton textTool = new ToggleButton("A 文字");
+        textTool.setToggleGroup(toolGroup);
+        textTool.setOnAction(e -> setToolMode(ToolMode.DRAW_TEXT));
+
+        ToggleButton rectTool = new ToggleButton("⬜ 矩形");
+        rectTool.setToggleGroup(toolGroup);
+        rectTool.setOnAction(e -> setToolMode(ToolMode.DRAW_RECT));
+
+        ToggleButton circleTool = new ToggleButton("⭕ 圆形");
+        circleTool.setToggleGroup(toolGroup);
+        circleTool.setOnAction(e -> setToolMode(ToolMode.DRAW_CIRCLE));
+
+        FlowPane toolButtons = new FlowPane(10, 10);
+        toolButtons.setAlignment(Pos.CENTER_LEFT);
+        toolButtons.getChildren().addAll(selectTool, cropTool, brushTool, textTool, rectTool, circleTool);
 
         Separator sep2 = new Separator();
 
-        // 裁剪工具
-        Label cropLabel = createSectionLabel("✂️ 裁剪");
-        Button cropBtn = new Button("选择裁剪区域");
-        cropBtn.setPrefWidth(Double.MAX_VALUE);
-        cropBtn.setOnAction(e -> startCrop());
+        // 绘图工具设置面板
+        VBox drawingSettings = createDrawingSettingsPanel();
+        drawingSettings.setVisible(false); // 默认隐藏
+
+        // 监听工具切换，显示/隐藏设置面板
+        toolGroup.selectedToggleProperty().addListener((obs, oldVal, newVal) -> {
+            boolean isDrawingTool = newVal == brushTool || newVal == rectTool || newVal == circleTool;
+            drawingSettings.setVisible(isDrawingTool);
+        });
 
         Separator sep3 = new Separator();
 
@@ -816,15 +865,15 @@ public class ModernImageEditor extends Application {
         Separator sep6 = new Separator();
 
         // AI功能
-        Label aiLabel = createSectionLabel("🤖 AI增强");
+//        Label aiLabel = createSectionLabel("🤖 AI增强");
 
-        Button aiEnhanceBtn = new Button("✨ AI增强");
-        aiEnhanceBtn.setPrefWidth(Double.MAX_VALUE);
-        aiEnhanceBtn.setOnAction(e -> aiEnhance());
+//        Button aiEnhanceBtn = new Button("✨ AI增强");
+//        aiEnhanceBtn.setPrefWidth(Double.MAX_VALUE);
+//        aiEnhanceBtn.setOnAction(e -> aiEnhance());
 
-        Button removeBackground = new Button("🖼 移除背景");
-        removeBackground.setPrefWidth(Double.MAX_VALUE);
-        removeBackground.setOnAction(e -> removeBackground());
+//        Button removeBackground = new Button("🖼 移除背景");
+//        removeBackground.setPrefWidth(Double.MAX_VALUE);
+//        removeBackground.setOnAction(e -> removeBackground());
 
         Button artisticStyle = new Button("🎨 艺术风格");
         artisticStyle.setPrefWidth(Double.MAX_VALUE);
@@ -832,12 +881,11 @@ public class ModernImageEditor extends Application {
 
         leftPanel.getChildren().addAll(
                 basicLabel, adjustmentPanel,
-                sep1, drawingLabel, drawingButtons,
-                sep2, cropLabel, cropBtn,
-                sep3, batchLabel, batchBtn,
-                sep4, transformLabel, transformButtons,
-                sep5, filterLabel, blurControl, grayscaleBtn, edgeDetectBtn,
-                sep6, aiLabel, aiEnhanceBtn, removeBackground, artisticStyle
+                sep1, toolsLabel, toolButtons, drawingSettings,
+                sep2, batchLabel, batchBtn,
+                sep3, transformLabel, transformButtons,
+                sep4, filterLabel, blurControl, grayscaleBtn, edgeDetectBtn,
+                sep5, artisticStyle
         );
 
         ScrollPane scrollPane = new ScrollPane(leftPanel);
@@ -847,10 +895,104 @@ public class ModernImageEditor extends Application {
         return scrollPane;
     }
 
+    /**
+     * 创建绘图设置面板 - 修复清除按钮问题
+     */
+    private VBox createDrawingSettingsPanel() {
+        VBox panel = new VBox(10);
+        panel.setPadding(new Insets(15));
+        panel.setStyle("-fx-background-color: rgba(0,0,0,0.05); -fx-background-radius: 8;");
+
+        Label settingsLabel = new Label("画笔设置");
+        settingsLabel.setStyle("-fx-font-size: 13px; -fx-font-weight: bold;");
+
+        // 颜色选择
+        HBox colorBox = new HBox(10);
+        colorBox.setAlignment(Pos.CENTER_LEFT);
+
+        Label colorLabel = new Label("颜色:");
+        colorPicker = new ColorPicker(Color.BLACK);
+        colorPicker.setOnAction(e -> {
+            Color selectedColor = colorPicker.getValue();
+            currentBrushStyle = new DrawingOperation.BrushStyle(
+                    new java.awt.Color(
+                            (float) selectedColor.getRed(),
+                            (float) selectedColor.getGreen(),
+                            (float) selectedColor.getBlue(),
+                            (float) selectedColor.getOpacity()
+                    ),
+                    currentBrushStyle.getThickness(),
+                    currentBrushStyle.getOpacity()
+            );
+        });
+
+        colorBox.getChildren().addAll(colorLabel, colorPicker);
+
+        // 画笔大小
+        HBox sizeBox = new HBox(10);
+        sizeBox.setAlignment(Pos.CENTER_LEFT);
+
+        Label sizeLabel = new Label("粗细:");
+        brushSizeSpinner = new Spinner<>(1, 50, 3);
+        brushSizeSpinner.setEditable(true);
+        brushSizeSpinner.valueProperty().addListener((obs, oldVal, newVal) -> {
+            currentBrushStyle = new DrawingOperation.BrushStyle(
+                    currentBrushStyle.getColor(),
+                    newVal,
+                    currentBrushStyle.getOpacity()
+            );
+        });
+
+        sizeBox.getChildren().addAll(sizeLabel, brushSizeSpinner);
+
+        // 清除当前绘图按钮 - 修复版本
+        Button clearDrawingBtn = new Button("🗑️ 清除当前绘图");
+        clearDrawingBtn.setOnAction(e -> {
+            // 清除内存中的点
+            currentBrushPoints.clear();
+
+            // 清除画布预览
+            clearCanvasPreview();
+
+            updateStatus("当前绘图已清除");
+        });
+
+        // 应用绘图按钮
+//        Button applyDrawingBtn = new Button("✅ 应用绘图");
+//        applyDrawingBtn.setOnAction(e -> {
+//            if (currentBrushPoints.size() >= 2) {
+//                applyCurrentDrawing();
+//            } else {
+//                showWarning("绘图", "请先绘制一些内容");
+//            }
+//        });
+
+        panel.getChildren().addAll(settingsLabel, colorBox, sizeBox, clearDrawingBtn);
+
+        return panel;
+    }
+
+    /**
+     * 清除画布预览
+     */
+    private void clearCanvasPreview() {
+        // 在 createCenterPanel() 方法中需要给画布设置ID，以便这里能找到
+        StackPane centerPane = (StackPane) imageScrollPane.getParent();
+        if (centerPane != null) {
+            // 查找画布
+            Node canvasNode = centerPane.lookup("#selection-canvas");
+            if (canvasNode instanceof Canvas) {
+                Canvas canvas = (Canvas) canvasNode;
+                GraphicsContext gc = canvas.getGraphicsContext2D();
+                gc.clearRect(0, 0, canvas.getWidth(), canvas.getHeight());
+            }
+        }
+    }
+
     // ==================== 绘图、裁剪、批量处理方法 ====================
 
     /**
-     * 添加文字到图片
+     * 非交互式文字添加方法也需要修复
      */
     private void addText() {
         if (currentImage == null) {
@@ -858,22 +1000,57 @@ public class ModernImageEditor extends Application {
             return;
         }
 
-        TextInputDialog dialog = new TextInputDialog("请输入文字");
+        // 创建自定义对话框
+        Dialog<String> dialog = new Dialog<>();
         dialog.setTitle("添加文字");
         dialog.setHeaderText("输入要添加的文字");
-        dialog.setContentText("文字:");
+
+        // 使用支持中文的字体
+        Font chineseFont = Font.font("Microsoft YaHei", 14);
+        TextArea textArea = new TextArea();
+        textArea.setFont(chineseFont);
+        textArea.setPromptText("请输入文字...");
+        textArea.setWrapText(true);
+        textArea.setPrefRowCount(3);
+
+        VBox content = new VBox(10);
+        content.setPadding(new Insets(10));
+        content.getChildren().addAll(new Label("文字:"), textArea);
+
+        dialog.getDialogPane().setContent(content);
+        dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+
+        // 验证输入
+        Node okButton = dialog.getDialogPane().lookupButton(ButtonType.OK);
+        textArea.textProperty().addListener((obs, oldText, newText) -> {
+            okButton.setDisable(newText.trim().isEmpty());
+        });
+
+        dialog.setResultConverter(dialogButton -> {
+            if (dialogButton == ButtonType.OK) {
+                return textArea.getText().trim();
+            }
+            return null;
+        });
 
         dialog.showAndWait().ifPresent(text -> {
             // 创建文字样式
             DrawingOperation.TextStyle textStyle = new DrawingOperation.TextStyle(
-                    "Arial", 24, java.awt.Color.BLACK, false, false, false);
+                    getSystemChineseFont(),  // 使用系统中文字体
+                    24,
+                    java.awt.Color.BLACK,
+                    false, false, false);
 
             // 创建绘图元素
             List<DrawingOperation.DrawingPoint> points = new ArrayList<>();
             points.add(new DrawingOperation.DrawingPoint(50, 50));
 
             DrawingOperation.DrawingElement element = new DrawingOperation.DrawingElement(
-                    DrawingOperation.DrawingType.TEXT, points, text, null, textStyle);
+                    DrawingOperation.DrawingType.TEXT,
+                    points,
+                    text,
+                    null,
+                    textStyle);
 
             // 创建绘图操作
             DrawingOperation operation = new DrawingOperation(element);
@@ -1372,13 +1549,11 @@ public class ModernImageEditor extends Application {
 
         return buttonBox;
     }
-
     /**
-     * 创建中心图像显示区域
+     * 创建中心图像显示区域 - 增强交互功能
      */
     private StackPane createCenterPanel() {
         StackPane centerPane = new StackPane();
-        // 初始样式将在主题应用时设置
 
         // 图像容器
         VBox imageContainer = new VBox(20);
@@ -1390,9 +1565,24 @@ public class ModernImageEditor extends Application {
         imageView.setPreserveRatio(true);
         imageView.setSmooth(true);
 
+        // 创建交互覆盖层
+        Pane interactionOverlay = new Pane();
+        interactionOverlay.setMouseTransparent(false);
+        interactionOverlay.setStyle("-fx-background-color: transparent;");
+
+
+        // 创建用于显示选择框的画布
+        Canvas selectionCanvas = new Canvas();
+        selectionCanvas.setMouseTransparent(true); // 画布不接收鼠标事件
+        selectionCanvas.setId("selection-canvas");  // 设置ID
+        GraphicsContext gc = selectionCanvas.getGraphicsContext2D();
+
         StackPane imagePane = new StackPane();
         imagePane.setStyle("-fx-background-color: transparent;");
-        imagePane.getChildren().add(imageView);
+        imagePane.getChildren().addAll(imageView, selectionCanvas, interactionOverlay);
+
+        // 为覆盖层添加鼠标事件监听
+        setupMouseInteraction(interactionOverlay, selectionCanvas);
 
         // 图像控制按钮
         HBox controlButtons = new HBox(15);
@@ -1415,7 +1605,12 @@ public class ModernImageEditor extends Application {
         Button zoom100 = createIconButton("1:1", "原始");
         zoom100.setOnAction(e -> resetZoom());
 
-        controlButtons.getChildren().addAll(zoomIn, zoomOut, zoomFit, zoom100);
+        // 添加确认裁剪按钮
+        Button confirmCropBtn = createIconButton("✓", "确认裁剪");
+        confirmCropBtn.setVisible(false);
+        confirmCropBtn.setOnAction(e -> applyCropSelection());
+
+        controlButtons.getChildren().addAll(zoomIn, zoomOut, zoomFit, zoom100, confirmCropBtn);
 
         imageContainer.getChildren().addAll(imagePane, controlButtons);
 
@@ -1453,6 +1648,624 @@ public class ModernImageEditor extends Application {
         return centerPane;
     }
 
+    /**
+     * 设置鼠标交互
+     */
+    private void setupMouseInteraction(Pane overlay, Canvas selectionCanvas) {
+        overlay.setOnMousePressed(e -> {
+            if (currentImage == null) return;
+
+            double mouseX = e.getX();
+            double mouseY = e.getY();
+
+            // 转换为图像原始坐标
+            double[] imageCoords = convertToImageCoordinates(mouseX, mouseY);
+
+            switch (currentToolMode) {
+                case CROP:
+                    startCropSelection(imageCoords[0], imageCoords[1]);
+                    isSelectingCrop = true;
+                    break;
+
+                case DRAW_BRUSH:
+                    startDrawing(imageCoords[0], imageCoords[1]);
+                    break;
+
+                case DRAW_RECT:
+                case DRAW_CIRCLE:
+                    startShapeDrawing(imageCoords[0], imageCoords[1]);
+                    break;
+            }
+        });
+
+        overlay.setOnMouseDragged(e -> {
+            if (currentImage == null) return;
+
+            double mouseX = e.getX();
+            double mouseY = e.getY();
+            double[] imageCoords = convertToImageCoordinates(mouseX, mouseY);
+
+            switch (currentToolMode) {
+                case CROP:
+                    if (isSelectingCrop) {
+                        updateCropSelection(imageCoords[0], imageCoords[1], selectionCanvas);
+                    }
+                    break;
+
+                case DRAW_BRUSH:
+                    continueDrawing(imageCoords[0], imageCoords[1], selectionCanvas);
+                    break;
+
+                case DRAW_RECT:
+                case DRAW_CIRCLE:
+                    updateShapeDrawing(imageCoords[0], imageCoords[1], selectionCanvas);
+                    break;
+            }
+        });
+
+        overlay.setOnMouseReleased(e -> {
+            if (currentImage == null) return;
+
+            double mouseX = e.getX();
+            double mouseY = e.getY();
+            double[] imageCoords = convertToImageCoordinates(mouseX, mouseY);
+
+            switch (currentToolMode) {
+                case CROP:
+                    if (isSelectingCrop) {
+                        endCropSelection(imageCoords[0], imageCoords[1]);
+                        isSelectingCrop = false;
+                        // 显示确认按钮
+                        HBox controlButtons = (HBox) imageScrollPane.getContent().lookup("#control-buttons");
+                        if (controlButtons != null) {
+                            Button confirmCropBtn = (Button) controlButtons.getChildren().get(4);
+                            confirmCropBtn.setVisible(cropSelection != null);
+                        }
+                    }
+                    break;
+
+                case DRAW_BRUSH:
+                    endDrawing();
+                    break;
+
+                case DRAW_RECT:
+                case DRAW_CIRCLE:
+                    endShapeDrawing(imageCoords[0], imageCoords[1]);
+                    break;
+            }
+        });
+
+        // 文字工具：点击时添加文字
+        overlay.setOnMouseClicked(e -> {
+            if (currentImage == null) return;
+
+            if (currentToolMode == ToolMode.DRAW_TEXT) {
+                double mouseX = e.getX();
+                double mouseY = e.getY();
+                double[] imageCoords = convertToImageCoordinates(mouseX, mouseY);
+
+                addTextAtPosition((int)imageCoords[0], (int)imageCoords[1]);
+            }
+        });
+    }
+
+    /**
+     * 转换屏幕坐标到图像原始坐标
+     */
+    private double[] convertToImageCoordinates(double screenX, double screenY) {
+        if (currentImage == null) return new double[]{0, 0};
+
+        // 获取ImageView的边界
+        double viewX = imageView.getBoundsInParent().getMinX();
+        double viewY = imageView.getBoundsInParent().getMinY();
+        double viewWidth = imageView.getBoundsInParent().getWidth();
+        double viewHeight = imageView.getBoundsInParent().getHeight();
+
+        // 获取原始图像尺寸
+        double imageWidth = currentImage.getWidth();
+        double imageHeight = currentImage.getHeight();
+
+        // 计算缩放比例
+        double scaleX = imageWidth / viewWidth;
+        double scaleY = imageHeight / viewHeight;
+
+        // 计算相对于ImageView的坐标
+        double relativeX = screenX - viewX;
+        double relativeY = screenY - viewY;
+
+        // 转换为原始图像坐标
+        double imageX = relativeX * scaleX;
+        double imageY = relativeY * scaleY;
+
+        // 确保坐标在图像范围内
+        imageX = Math.max(0, Math.min(imageX, imageWidth));
+        imageY = Math.max(0, Math.min(imageY, imageHeight));
+
+        return new double[]{imageX, imageY};
+    }
+
+    /**
+     * 设置工具模式
+     */
+    private void setToolMode(ToolMode mode) {
+        currentToolMode = mode;
+
+        // 清除当前选择
+        cropSelection = null;
+        currentBrushPoints.clear();
+
+        // 隐藏确认裁剪按钮
+        if (mode != ToolMode.CROP) {
+            HBox controlButtons = (HBox) imageScrollPane.getContent().lookup("#control-buttons");
+            if (controlButtons != null && controlButtons.getChildren().size() > 4) {
+                Button confirmCropBtn = (Button) controlButtons.getChildren().get(4);
+                confirmCropBtn.setVisible(false);
+            }
+        }
+
+        updateStatus("切换到模式: " + mode.toString());
+    }
+
+    /**
+     * 开始选择裁剪区域
+     */
+    private void startCropSelection(double startX, double startY) {
+        cropStartX = startX;
+        cropStartY = startY;
+        cropSelection = new Rectangle((int)startX, (int)startY, 0, 0);
+    }
+
+    /**
+     * 更新裁剪选择区域
+     */
+    private void updateCropSelection(double endX, double endY, Canvas canvas) {
+        if (cropSelection == null) return;
+
+        double x = Math.min(cropStartX, endX);
+        double y = Math.min(cropStartY, endY);
+        double width = Math.abs(endX - cropStartX);
+        double height = Math.abs(endY - cropStartY);
+
+        cropSelection.setRect(x, y, width, height);
+
+        // 在画布上绘制选择框
+        drawSelectionRect(canvas, x, y, width, height);
+    }
+
+    /**
+     * 结束裁剪选择
+     */
+    private void endCropSelection(double endX, double endY) {
+        if (cropSelection == null) return;
+
+        double x = Math.min(cropStartX, endX);
+        double y = Math.min(cropStartY, endY);
+        double width = Math.abs(endX - cropStartX);
+        double height = Math.abs(endY - cropStartY);
+
+        cropSelection.setRect(x, y, width, height);
+
+        updateStatus(String.format("裁剪区域: (%.0f, %.0f) %.0f×%.0f", x, y, width, height));
+    }
+
+    /**
+     * 应用裁剪选择
+     */
+    private void applyCropSelection() {
+        if (cropSelection == null || currentImage == null) return;
+
+        // 转换为整数
+        int x = (int) Math.round(cropSelection.getX());
+        int y = (int) Math.round(cropSelection.getY());
+        int width = (int) Math.round(cropSelection.getWidth());
+        int height = (int) Math.round(cropSelection.getHeight());
+
+        // 确保在图像范围内
+        int imageWidth = (int) currentImage.getWidth();
+        int imageHeight = (int) currentImage.getHeight();
+
+        x = Math.max(0, Math.min(x, imageWidth - 1));
+        y = Math.max(0, Math.min(y, imageHeight - 1));
+        width = Math.min(width, imageWidth - x);
+        height = Math.min(height, imageHeight - y);
+
+        if (width <= 0 || height <= 0) {
+            showWarning("无效区域", "裁剪区域太小或无效");
+            return;
+        }
+
+        CropOperation operation = new CropOperation(x, y, width, height);
+        applyOperation(operation, "裁剪图片");
+
+        // 清除选择
+        cropSelection = null;
+
+        // 隐藏确认按钮
+        HBox controlButtons = (HBox) imageScrollPane.getContent().lookup("#control-buttons");
+        if (controlButtons != null && controlButtons.getChildren().size() > 4) {
+            Button confirmCropBtn = (Button) controlButtons.getChildren().get(4);
+            confirmCropBtn.setVisible(false);
+        }
+    }
+
+    /**
+     * 在画布上绘制选择框
+     */
+    private void drawSelectionRect(Canvas canvas, double x, double y, double width, double height) {
+        GraphicsContext gc = canvas.getGraphicsContext2D();
+
+        // 清除画布
+        gc.clearRect(0, 0, canvas.getWidth(), canvas.getHeight());
+
+        // 设置画布大小与ImageView相同
+        canvas.setWidth(imageView.getBoundsInParent().getWidth());
+        canvas.setHeight(imageView.getBoundsInParent().getHeight());
+
+        // 计算屏幕坐标
+        double viewWidth = imageView.getBoundsInParent().getWidth();
+        double viewHeight = imageView.getBoundsInParent().getHeight();
+        double imageWidth = currentImage.getWidth();
+        double imageHeight = currentImage.getHeight();
+
+        double scaleX = viewWidth / imageWidth;
+        double scaleY = viewHeight / imageHeight;
+
+        double screenX = x * scaleX;
+        double screenY = y * scaleY;
+        double screenWidth = width * scaleX;
+        double screenHeight = height * scaleY;
+
+        // 绘制半透明填充
+        gc.setFill(Color.rgb(0, 150, 255, 0.1));
+        gc.fillRect(screenX, screenY, screenWidth, screenHeight);
+
+        // 绘制边框
+        gc.setStroke(Color.rgb(0, 150, 255, 0.8));
+        gc.setLineWidth(2);
+        gc.strokeRect(screenX, screenY, screenWidth, screenHeight);
+
+        // 绘制角点
+        gc.setFill(Color.WHITE);
+        gc.setStroke(Color.rgb(0, 150, 255, 0.8));
+
+        double cornerSize = 8;
+
+        // 左上角
+        gc.fillRect(screenX - cornerSize/2, screenY - cornerSize/2, cornerSize, cornerSize);
+        gc.strokeRect(screenX - cornerSize/2, screenY - cornerSize/2, cornerSize, cornerSize);
+
+        // 右上角
+        gc.fillRect(screenX + screenWidth - cornerSize/2, screenY - cornerSize/2, cornerSize, cornerSize);
+        gc.strokeRect(screenX + screenWidth - cornerSize/2, screenY - cornerSize/2, cornerSize, cornerSize);
+
+        // 左下角
+        gc.fillRect(screenX - cornerSize/2, screenY + screenHeight - cornerSize/2, cornerSize, cornerSize);
+        gc.strokeRect(screenX - cornerSize/2, screenY + screenHeight - cornerSize/2, cornerSize, cornerSize);
+
+        // 右下角
+        gc.fillRect(screenX + screenWidth - cornerSize/2, screenY + screenHeight - cornerSize/2, cornerSize, cornerSize);
+        gc.strokeRect(screenX + screenWidth - cornerSize/2, screenY + screenHeight - cornerSize/2, cornerSize, cornerSize);
+    }
+
+    /**
+     * 开始绘图
+     */
+    private void startDrawing(double x, double y) {
+        currentBrushPoints.clear();
+        currentBrushPoints.add(new DrawingOperation.DrawingPoint((int)x, (int)y));
+    }
+
+    /**
+     * 继续绘图
+     */
+    private void continueDrawing(double x, double y, Canvas canvas) {
+        if (currentBrushPoints.isEmpty()) return;
+
+        currentBrushPoints.add(new DrawingOperation.DrawingPoint((int)x, (int)y));
+        drawBrushPreview(canvas);
+    }
+
+    /**
+     * 结束绘图
+     */
+    private void endDrawing() {
+        if (currentBrushPoints.size() >= 2) {
+            applyCurrentDrawing();
+        }
+        currentBrushPoints.clear();
+    }
+
+    /**
+     * 应用当前绘图
+     */
+    private void applyCurrentDrawing() {
+        if (currentBrushPoints.size() < 2) {
+            showWarning("绘图", "请先绘制一些内容");
+            return;
+        }
+
+        DrawingOperation.DrawingElement element = new DrawingOperation.DrawingElement(
+                DrawingOperation.DrawingType.BRUSH,
+                new ArrayList<>(currentBrushPoints),
+                null,
+                currentBrushStyle,
+                null
+        );
+
+        DrawingOperation operation = new DrawingOperation(element);
+        applyOperation(operation, "画笔绘制");
+
+        currentBrushPoints.clear();
+        updateStatus("绘图已应用");
+    }
+
+    /**
+     * 在画布上绘制画笔预览
+     */
+    private void drawBrushPreview(Canvas canvas) {
+        if (currentBrushPoints.size() < 2) return;
+
+        GraphicsContext gc = canvas.getGraphicsContext2D();
+        gc.clearRect(0, 0, canvas.getWidth(), canvas.getHeight());
+
+        // 设置画布大小
+        canvas.setWidth(imageView.getBoundsInParent().getWidth());
+        canvas.setHeight(imageView.getBoundsInParent().getHeight());
+
+        // 转换为屏幕坐标
+        double viewWidth = imageView.getBoundsInParent().getWidth();
+        double viewHeight = imageView.getBoundsInParent().getHeight();
+        double imageWidth = currentImage.getWidth();
+        double imageHeight = currentImage.getHeight();
+
+        double scaleX = viewWidth / imageWidth;
+        double scaleY = viewHeight / imageHeight;
+
+        // 设置画笔样式
+        java.awt.Color color = currentBrushStyle.getColor();
+        gc.setStroke(Color.rgb(color.getRed(), color.getGreen(), color.getBlue(), color.getAlpha() / 255.0));
+        gc.setLineWidth(currentBrushStyle.getThickness() * Math.min(scaleX, scaleY));
+        gc.setLineCap(javafx.scene.shape.StrokeLineCap.ROUND);
+        gc.setLineJoin(javafx.scene.shape.StrokeLineJoin.ROUND);
+
+        // 绘制线条
+        for (int i = 0; i < currentBrushPoints.size() - 1; i++) {
+            DrawingOperation.DrawingPoint p1 = currentBrushPoints.get(i);
+            DrawingOperation.DrawingPoint p2 = currentBrushPoints.get(i + 1);
+
+            double x1 = p1.getX() * scaleX;
+            double y1 = p1.getY() * scaleY;
+            double x2 = p2.getX() * scaleX;
+            double y2 = p2.getY() * scaleY;
+
+            gc.strokeLine(x1, y1, x2, y2);
+        }
+    }
+
+    /**
+     * 在指定位置添加文字 - 修复中文乱码问题
+     */
+    private void addTextAtPosition(int x, int y) {
+        // 创建自定义的文本输入对话框
+        Dialog<String> dialog = new Dialog<>();
+        dialog.setTitle("添加文字");
+        dialog.setHeaderText("输入要添加的文字");
+
+        // 使用支持中文的字体
+        Font chineseFont = Font.font("Microsoft YaHei", 14);
+
+        // 创建文本输入区域
+        TextArea textArea = new TextArea();
+        textArea.setFont(chineseFont);
+        textArea.setPromptText("请输入文字...");
+        textArea.setWrapText(true);
+        textArea.setPrefRowCount(3);
+        textArea.setPrefColumnCount(20);
+
+        // 设置对话框内容
+        VBox content = new VBox(10);
+        content.setPadding(new Insets(10));
+        content.getChildren().addAll(new Label("文字:"), textArea);
+
+        dialog.getDialogPane().setContent(content);
+
+        // 添加按钮
+        dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+
+        // 验证输入
+        Node okButton = dialog.getDialogPane().lookupButton(ButtonType.OK);
+        textArea.textProperty().addListener((obs, oldText, newText) -> {
+            okButton.setDisable(newText.trim().isEmpty());
+        });
+
+        // 设置结果转换器
+        dialog.setResultConverter(dialogButton -> {
+            if (dialogButton == ButtonType.OK) {
+                return textArea.getText().trim();
+            }
+            return null;
+        });
+
+        // 显示对话框并处理结果
+        dialog.showAndWait().ifPresent(text -> {
+            if (text.isEmpty()) {
+                showWarning("输入错误", "请输入有效的文字");
+                return;
+            }
+
+            // 创建文字样式 - 使用支持中文的字体
+            DrawingOperation.TextStyle textStyle = new DrawingOperation.TextStyle(
+                    getSystemChineseFont(),  // 获取系统中文字体
+                    24,
+                    currentBrushStyle.getColor(),
+                    false, false, false);
+
+            // 创建绘图元素
+            List<DrawingOperation.DrawingPoint> points = new ArrayList<>();
+            points.add(new DrawingOperation.DrawingPoint(x, y));
+
+            DrawingOperation.DrawingElement element = new DrawingOperation.DrawingElement(
+                    DrawingOperation.DrawingType.TEXT,
+                    points,
+                    text,
+                    null,
+                    textStyle);
+
+            // 创建绘图操作
+            DrawingOperation operation = new DrawingOperation(element);
+            applyOperation(operation, "添加文字");
+        });
+    }
+
+    /**
+     * 获取系统可用的中文字体
+     */
+    private String getSystemChineseFont() {
+        // 优先使用常见的中文字体
+        String[] chineseFonts = {
+                "Microsoft YaHei",      // Windows
+                "PingFang SC",         // macOS
+                "Noto Sans CJK SC",    // Linux/通用
+                "SimHei",              // 黑体
+                "SimSun",              // 宋体
+                "NSimSun",             // 新宋体
+                "KaiTi",               // 楷体
+                "FangSong",            // 仿宋
+                "Microsoft JhengHei",  // 繁体
+                "STXihei",             // 华文细黑
+                "STSong",              // 华文宋体
+                "STKaiti",             // 华文楷体
+                "STFangsong"          // 华文仿宋
+        };
+
+        // 检查系统字体
+        List<String> systemFonts = javafx.scene.text.Font.getFamilies();
+
+        for (String font : chineseFonts) {
+            if (systemFonts.contains(font)) {
+                return font;
+            }
+        }
+
+        // 如果没有找到中文字体，使用默认字体并尝试加载
+        return "Microsoft YaHei";
+    }
+
+    /**
+     * 开始形状绘制
+     */
+    private void startShapeDrawing(double x, double y) {
+        currentBrushPoints.clear();
+        currentBrushPoints.add(new DrawingOperation.DrawingPoint((int)x, (int)y));
+        currentBrushPoints.add(new DrawingOperation.DrawingPoint((int)x, (int)y));
+    }
+
+    /**
+     * 更新形状绘制
+     */
+    private void updateShapeDrawing(double x, double y, Canvas canvas) {
+        if (currentBrushPoints.size() < 2) return;
+
+        currentBrushPoints.set(1, new DrawingOperation.DrawingPoint((int)x, (int)y));
+        drawShapePreview(canvas);
+    }
+
+    /**
+     * 结束形状绘制
+     */
+    private void endShapeDrawing(double x, double y) {
+        if (currentBrushPoints.size() >= 2) {
+            currentBrushPoints.set(1, new DrawingOperation.DrawingPoint((int)x, (int)y));
+            applyCurrentShape();
+        }
+        currentBrushPoints.clear();
+    }
+
+    /**
+     * 应用当前形状
+     */
+    private void applyCurrentShape() {
+        if (currentBrushPoints.size() < 2) return;
+
+        DrawingOperation.DrawingType type;
+        switch (currentToolMode) {
+            case DRAW_RECT:
+                type = DrawingOperation.DrawingType.RECTANGLE;
+                break;
+            case DRAW_CIRCLE:
+                type = DrawingOperation.DrawingType.CIRCLE;
+                break;
+            default:
+                return;
+        }
+
+        DrawingOperation.DrawingElement element = new DrawingOperation.DrawingElement(
+                type,
+                new ArrayList<>(currentBrushPoints),
+                null,
+                currentBrushStyle,
+                null
+        );
+
+        DrawingOperation operation = new DrawingOperation(element);
+        applyOperation(operation, type == DrawingOperation.DrawingType.RECTANGLE ? "绘制矩形" : "绘制圆形");
+
+        currentBrushPoints.clear();
+    }
+
+    /**
+     * 在画布上绘制形状预览
+     */
+    private void drawShapePreview(Canvas canvas) {
+        if (currentBrushPoints.size() < 2) return;
+
+        GraphicsContext gc = canvas.getGraphicsContext2D();
+        gc.clearRect(0, 0, canvas.getWidth(), canvas.getHeight());
+
+        // 设置画布大小
+        canvas.setWidth(imageView.getBoundsInParent().getWidth());
+        canvas.setHeight(imageView.getBoundsInParent().getHeight());
+
+        // 转换为屏幕坐标
+        double viewWidth = imageView.getBoundsInParent().getWidth();
+        double viewHeight = imageView.getBoundsInParent().getHeight();
+        double imageWidth = currentImage.getWidth();
+        double imageHeight = currentImage.getHeight();
+
+        double scaleX = viewWidth / imageWidth;
+        double scaleY = viewHeight / imageHeight;
+
+        DrawingOperation.DrawingPoint p1 = currentBrushPoints.get(0);
+        DrawingOperation.DrawingPoint p2 = currentBrushPoints.get(1);
+
+        double x1 = p1.getX() * scaleX;
+        double y1 = p1.getY() * scaleY;
+        double x2 = p2.getX() * scaleX;
+        double y2 = p2.getY() * scaleY;
+
+        double x = Math.min(x1, x2);
+        double y = Math.min(y1, y2);
+        double width = Math.abs(x2 - x1);
+        double height = Math.abs(y2 - y1);
+
+        // 设置画笔样式
+        java.awt.Color color = currentBrushStyle.getColor();
+        gc.setStroke(Color.rgb(color.getRed(), color.getGreen(), color.getBlue(), color.getAlpha() / 255.0));
+        gc.setLineWidth(currentBrushStyle.getThickness() * Math.min(scaleX, scaleY));
+        gc.setLineDashes(0);
+
+        switch (currentToolMode) {
+            case DRAW_RECT:
+                gc.strokeRect(x, y, width, height);
+                break;
+            case DRAW_CIRCLE:
+                double radius = Math.min(width, height) / 2;
+                double centerX = x + width / 2;
+                double centerY = y + height / 2;
+                gc.strokeOval(centerX - radius, centerY - radius, radius * 2, radius * 2);
+                break;
+        }
+    }
     /**
      * 创建右侧面板
      */
