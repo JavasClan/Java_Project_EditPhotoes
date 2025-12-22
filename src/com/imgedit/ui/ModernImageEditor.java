@@ -552,9 +552,9 @@ public class ModernImageEditor extends Application {
                 }
 
                 if (saturationValue != 0) {
-                    // 饱和度调整（使用对比度模拟）
-                    float saturationLevel = (float)(saturationValue / 100.0f + 1.0f);
-                    ContrastOperation saturationOp = new ContrastOperation(saturationLevel * 0.5f);
+                    // 使用真正的饱和度调整算法
+                    float saturationFactor = (float)(saturationValue / 100.0f + 1.0f);
+                    SaturationOperation saturationOp = new SaturationOperation(saturationFactor);
 
                     imageEditorService.applyOperationAsync(
                             saturationOp,
@@ -594,7 +594,7 @@ public class ModernImageEditor extends Application {
                         summary.append("• 饱和度: ").append(saturationValue).append("\n");
                     }
 
-                    showSuccess("调整完成", summary.toString());
+                    //showSuccess("调整完成", summary.toString());
                 });
 
             } catch (Exception e) {
