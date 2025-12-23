@@ -481,3 +481,247 @@
     -fx-text-fill: #667eea;
     -fx-border-color: #667eea;
 }
+
+.app-logo-icon {
+    -fx-font-size: 32px;
+    -fx-text-fill: linear-gradient(to bottom right, #667eea, #764ba2);
+    -fx-effect: dropshadow(gaussian, rgba(102, 126, 234, 0.6), 15, 0.2, 0, 0);
+    -fx-font-family: "Segoe UI Emoji", "Apple Color Emoji";
+}
+
+/* Logo 文字 - 深色专业字体 + 白边 */
+.app-logo-text {
+    -fx-font-family: 'Segoe UI Black', 'Impact', sans-serif;
+    -fx-font-size: 24px;
+    -fx-text-fill: #2d3748;
+    -fx-effect: dropshadow(one-pass-box, rgba(255,255,255,0.8), 0, 0, 1, 1);
+}
+
+/* 专门的保存按钮 - 强调色 */
+.save-btn {
+    -fx-background-color: linear-gradient(to right, #667eea, #764ba2);
+    -fx-text-fill: white;
+    -fx-font-weight: bold;
+    -fx-font-size: 13px;
+    -fx-background-radius: 20px;
+    -fx-padding: 6px 20px;
+    -fx-cursor: hand;
+    -fx-effect: dropshadow(three-pass-box, rgba(102, 126, 234, 0.3), 5, 0, 0, 1);
+}
+.save-btn:hover {
+    -fx-background-color: linear-gradient(to right, #764ba2, #667eea);
+    -fx-scale-x: 1.05;
+    -fx-scale-y: 1.05;
+}
+
+.toast-message {
+    -fx-padding: 12px 24px;
+    -fx-background-radius: 30px;
+    -fx-font-size: 14px;
+    -fx-font-weight: bold;
+    -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.2), 10, 0, 0, 4);
+    -fx-text-fill: white;
+}
+
+.toast-success {
+    -fx-background-color: rgba(16, 185, 129, 0.95); /* 翡翠绿 */
+}
+
+.toast-error {
+    -fx-background-color: rgba(239, 68, 68, 0.95); /* 警示红 */
+}
+
+.toast-info {
+    -fx-background-color: rgba(59, 130, 246, 0.95); /* 科技蓝 */
+}
+
+.upload-zone {
+    -fx-background-color: rgba(255, 255, 255, 0.4); /* 半透明磨砂底 */
+    -fx-border-color: #cbd5e1;
+    -fx-border-width: 3px;
+    -fx-border-style: dashed; /* 虚线边框 */
+    -fx-border-radius: 24px;
+    -fx-background-radius: 24px;
+    -fx-alignment: center;
+    -fx-spacing: 20px;
+    -fx-padding: 40px;
+    -fx-cursor: hand; /* 鼠标放上去变手型 */
+    -fx-transition: all 0.3s ease-in-out;
+}
+
+.upload-zone:hover {
+    -fx-background-color: rgba(255, 255, 255, 0.8);
+    -fx-border-color: #667eea; /* 悬浮变紫 */
+    -fx-scale-x: 1.02;
+    -fx-scale-y: 1.02;
+    -fx-effect: dropshadow(three-pass-box, rgba(102, 126, 234, 0.3), 20, 0, 0, 0);
+}
+
+.upload-icon {
+    -fx-font-size: 80px;
+    -fx-text-fill: #94a3b8;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.1), 5, 0, 0, 2);
+    -fx-transition: -fx-text-fill 0.3s;
+}
+
+.upload-zone:hover .upload-icon {
+    -fx-text-fill: linear-gradient(to bottom right, #667eea, #764ba2);
+}
+
+.upload-hint-title {
+    -fx-font-size: 24px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #475569;
+}
+
+.upload-hint-sub {
+    -fx-font-size: 14px;
+    -fx-text-fill: #94a3b8;
+}
+
+/* =============================================================================
+   🚀 启动画面美化 (Splash Screen)
+   ============================================================================= */
+
+.splash-root {
+    /* 这里的背景可以配合 Java 代码里的透明设置，或者直接覆盖 */
+    -fx-background-color: linear-gradient(from 0% 0% to 100% 100%, #667eea 0%, #764ba2 100%);
+    -fx-border-color: rgba(255,255,255,0.2);
+    -fx-border-width: 1px;
+}
+
+.splash-logo-bg {
+    -fx-fill: white;
+    -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.3), 20, 0, 0, 5);
+}
+
+.splash-title {
+    -fx-font-family: 'Segoe UI Black', 'Impact', sans-serif;
+    -fx-font-size: 36px;
+    -fx-text-fill: white;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.3), 5, 0, 0, 2);
+}
+
+.splash-subtitle {
+    -fx-font-size: 14px;
+    -fx-text-fill: rgba(255,255,255,0.8);
+    -fx-font-weight: bold;
+    -fx-letter-spacing: 2px;
+}
+
+.splash-loading-text {
+    -fx-text-fill: white;
+    -fx-font-size: 12px;
+    -fx-opacity: 0.8;
+}
+
+/* 覆盖默认进度条样式，让它适合启动页的深色背景 */
+.splash-progress-bar .track {
+    -fx-background-color: rgba(255, 255, 255, 0.2);
+    -fx-background-radius: 4px;
+}
+.splash-progress-bar .bar {
+    -fx-background-color: #00ffc8; /* 亮青色进度 */
+    -fx-background-radius: 4px;
+    -fx-effect: dropshadow(three-pass-box, rgba(0, 255, 200, 0.6), 10, 0, 0, 0);
+}
+
+.tooltip {
+    -fx-background-color: rgba(30, 30, 30, 0.9);
+    -fx-text-fill: white;
+    -fx-font-family: 'Segoe UI', sans-serif;
+    -fx-font-size: 12px;
+    -fx-padding: 8px 12px;
+    -fx-background-radius: 6px;
+    -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.3), 10, 0, 0, 2);
+}
+
+/* 18. 极简滚动条 (ScrollBar) - 隐形风格 */
+.scroll-bar:vertical, .scroll-bar:horizontal {
+    -fx-background-color: transparent;
+    -fx-pref-width: 10px; /* 变细 */
+    -fx-pref-height: 10px;
+}
+.scroll-bar .thumb {
+    -fx-background-color: rgba(128, 128, 128, 0.2);
+    -fx-background-radius: 5em;
+}
+.scroll-bar .thumb:hover {
+    -fx-background-color: rgba(102, 126, 234, 0.6); /* 悬浮变色 */
+}
+.scroll-bar .track {
+    -fx-background-color: transparent;
+}
+.scroll-bar .increment-button, .scroll-bar .decrement-button {
+    -fx-background-color: transparent;
+    -fx-padding: 0;
+}
+
+/* 19. 复选框 (CheckBox) - 现代风格 */
+.check-box .box {
+    -fx-background-color: white;
+    -fx-border-color: #d1d5db;
+    -fx-border-radius: 4px;
+    -fx-background-radius: 4px;
+}
+.check-box:selected .box {
+    -fx-background-color: #667eea;
+    -fx-border-color: #667eea;
+}
+.check-box:selected .mark {
+    -fx-background-color: white;
+    -fx-shape: "M0,2 L2,5 L6,0 L2,5 L0,2 Z"; /* 自定义对勾形状 */
+    -fx-scale-shape: true;
+}
+
+/* 20. 文本区域聚焦光晕增强 */
+.text-area:focused, .text-field:focused {
+    -fx-prompt-text-fill: transparent; /* 聚焦时隐藏提示词，更清爽 */
+}
+
+.sidebar-header {
+    -fx-font-family: 'Segoe UI Black', 'Impact', sans-serif;
+    -fx-font-size: 16px;
+    -fx-font-weight: bold;
+    -fx-padding: 5 0 10 0;
+    /* 默认深色，Java代码会根据主题覆盖 */
+    -fx-text-fill: #4a5568;
+}
+
+/* 2. 底部悬浮胶囊 (Floating Capsule) */
+.floating-bottom-bar {
+    -fx-background-radius: 30px;
+    -fx-border-radius: 30px;
+    -fx-padding: 10px 25px;
+    -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.15), 20, 0, 0, 5);
+}
+
+/* 3. 极简滚动条 (全局覆盖) */
+.scroll-pane > .viewport {
+    -fx-background-color: transparent;
+}
+.scroll-pane {
+    -fx-background-color: transparent;
+    -fx-background: transparent;
+}
+/* 滚动条轨道隐形 */
+.scroll-bar:vertical .track, .scroll-bar:horizontal .track {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+    -fx-background-radius: 0;
+}
+/* 滚动滑块平时半透明，悬浮变实 */
+.scroll-bar .thumb {
+    -fx-background-color: rgba(128, 128, 128, 0.15);
+    -fx-background-radius: 5em;
+    -fx-background-insets: 2;
+}
+.scroll-bar:hover .thumb {
+    -fx-background-color: rgba(128, 128, 128, 0.5);
+}
+
+/* 4. 按钮按下时的微缩放 (增加打击感) */
+.button:pressed, .icon-action-btn:pressed {
+    -fx-scale-x: 0.95;
+    -fx-scale-y: 0.95;
+}
