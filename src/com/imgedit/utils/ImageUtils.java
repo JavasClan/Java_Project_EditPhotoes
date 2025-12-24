@@ -27,5 +27,13 @@ public class ImageUtils {
         );
         return SwingFXUtils.toFXImage(bufferedImage, fxImage);
     }
+
+    public static Image bufferedImageToFxImage(BufferedImage bufferedImage) {
+        if (bufferedImage == null) {
+            return null;
+        }
+        return SwingFXUtils.toFXImage(bufferedImage, null);
+    }
+
 }
 
