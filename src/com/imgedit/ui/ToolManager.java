@@ -5,7 +5,6 @@ import imgedit.core.operations.DrawingOperation;
 import javafx.application.Platform;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
-import javafx.scene.image.ImageView;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.StrokeLineCap;
 import javafx.scene.shape.StrokeLineJoin;
@@ -32,9 +31,10 @@ public class ToolManager {
 
     // 绘图相关
     private List<DrawingOperation.DrawingPoint> currentBrushPoints = new ArrayList<>();
+    // 默认画笔样式
     private DrawingOperation.BrushStyle currentBrushStyle = new DrawingOperation.BrushStyle(
             java.awt.Color.BLACK, 3, 1.0f);
-    private boolean isDrawing = false;  // 新增：跟踪是否正在绘图
+    private boolean isDrawing = false;
 
     // 形状绘制
     private double shapeStartX, shapeStartY;
@@ -49,15 +49,17 @@ public class ToolManager {
 
     public void setToolMode(ToolMode mode) {
         currentToolMode = mode;
-        clearSelection();
+        clearSelection(); // 切换模式时清理
         controller.updateStatus("切换到模式: " + mode.toString());
     }
 
+    // ==================== 鼠标事件处理 ====================
+
     public void handleMousePressed(double x, double y, Canvas canvas) {
         if (controller.getImageManager().getCurrentImage() == null) return;
-        System.out.println("鼠标按下 - 屏幕坐标: (" + x + ", " + y + ")");
+
         double[] imageCoords = convertToImageCoordinates(x, y);
-        System.out.println("转换后 - 图像坐标: (" + imageCoords[0] + ", " + imageCoords[1] + ")");
+
         switch (currentToolMode) {
             case CROP:
                 startCropSelection(imageCoords[0], imageCoords[1]);
@@ -104,84 +106,52 @@ public class ToolManager {
         }
     }
 
-    // 修改 handleMouseReleased 方法
+    // 【重点修复】使用了 try-finally 确保画布一定会清理
     public void handleMouseReleased(double x, double y) {
         if (controller.getImageManager().getCurrentImage() == null) return;
 
         double[] imageCoords = convertToImageCoordinates(x, y);
 
-        switch (currentToolMode) {
-            case CROP:
-                if (isSelectingCrop) {
-                    endCropSelection(imageCoords[0], imageCoords[1]);
-                    isSelectingCrop = false;
-
-                    // 自动执行裁剪，而不是显示确认按钮
-                    if (cropSelection != null &&
-                            cropSelection.getWidth() > 0 &&
-                            cropSelection.getHeight() > 0) {
-                        applyCrop();
-                    } else {
-                        controller.updateStatus("裁剪区域无效，请重新选择");
+        try {
+            switch (currentToolMode) {
+                case CROP:
+                    if (isSelectingCrop) {
+                        endCropSelection(imageCoords[0], imageCoords[1]);
+                        isSelectingCrop = false;
+                        // 自动执行裁剪
+                        if (cropSelection != null &&
+                                cropSelection.getWidth() > 0 &&
+                                cropSelection.getHeight() > 0) {
+                            applyCrop();
+                        } else {
+                            controller.updateStatus("裁剪区域无效，请重新选择");
+                        }
                     }
+                    break;
 
-                    // 重要：立即清理画布
-                    clearSelectionCanvasImmediately();
-                }
-                break;
+                case DRAW_BRUSH:
+                    if (isDrawing) {
+                        endDrawing();
+                        isDrawing = false;
+                    }
+                    break;
 
-            case DRAW_BRUSH:
-                if (isDrawing) {
-                    endDrawing();
-                    isDrawing = false;
-
-                    // 重要：立即清理画布
-                    clearSelectionCanvasImmediately();
-                }
-                break;
-
-            case DRAW_RECT:
-            case DRAW_CIRCLE:
-                if (isDrawing) {
-                    endShapeDrawing(imageCoords[0], imageCoords[1]);
-                    isDrawing = false;
-
-                    // 重要：立即清理画布
-                    clearSelectionCanvasImmediately();
-                }
-                break;
-        }
-
-        // 额外清理：确保所有绘图状态都重置
-        resetDrawingStates();
-    }
-
-    // 新增：立即清理画布的方法
-    private void clearSelectionCanvasImmediately() {
-        Platform.runLater(() -> {
-            Canvas canvas = controller.getSelectionCanvas();
-            if (canvas != null) {
-                GraphicsContext gc = canvas.getGraphicsContext2D();
-                gc.clearRect(0, 0, canvas.getWidth(), canvas.getHeight());
-
-                // 用透明颜色填充整个画布
-                gc.setFill(Color.TRANSPARENT);
-                gc.fillRect(0, 0, canvas.getWidth(), canvas.getHeight());
-
-                // 重置画布大小
-                canvas.setWidth(0);
-                canvas.setHeight(0);
-
-                System.out.println("立即清理画布完成");
+                case DRAW_RECT:
+                case DRAW_CIRCLE:
+                    if (isDrawing) {
+                        endShapeDrawing(imageCoords[0], imageCoords[1]);
+                        isDrawing = false;
+                    }
+                    break;
             }
-        });
-    }
-
-    // 新增：重置所有绘图状态
-    private void resetDrawingStates() {
-        currentBrushPoints.clear();
-        isDrawing = false;
-        isDrawing = false;
+        } catch (Exception e) {
+            e.printStackTrace();
+            controller.showError("操作错误", e.getMessage());
+        } finally {
+            // 【关键】无论发生什么，强制清理预览画布，防止出现两个圈
+            clearSelectionCanvasImmediately();
+            resetDrawingStates();
+        }
     }
 
     public void handleTextClick(double x, double y) {
@@ -189,14 +159,44 @@ public class ToolManager {
         addTextAtPosition((int)imageCoords[0], (int)imageCoords[1]);
     }
 
+    // ==================== 辅助方法 ====================
+
+    // 【修复】更彻底的清理画布方法
+    private void clearSelectionCanvasImmediately() {
+        Canvas canvas = controller.getSelectionCanvas();
+        if (canvas != null) {
+            GraphicsContext gc = canvas.getGraphicsContext2D();
+
+            // 1. 清除内容 (清除比画布大一点的区域，防止边缘残留)
+            gc.clearRect(-10, -10, canvas.getWidth() + 20, canvas.getHeight() + 20);
+
+            // 2. 填充透明
+            gc.setFill(Color.TRANSPARENT);
+            gc.fillRect(0, 0, canvas.getWidth(), canvas.getHeight());
+
+            // 3. 重置路径 (防止路径残留)
+            gc.beginPath();
+
+            // 4. 重置大小
+            canvas.setWidth(0);
+            canvas.setHeight(0);
+        }
+    }
+
+    private void resetDrawingStates() {
+        currentBrushPoints.clear();
+        isDrawing = false;
+        isSelectingCrop = false;
+    }
+
     private double[] convertToImageCoordinates(double screenX, double screenY) {
         if (controller.getImageManager().getCurrentImage() == null) {
             return new double[]{screenX, screenY};
         }
-
-        // 使用 ImageManager 的坐标转换方法
         return controller.getImageManager().screenToImageCoordinates(screenX, screenY);
     }
+
+    // ==================== 裁剪逻辑 ====================
 
     private void startCropSelection(double x, double y) {
         cropStartX = x;
@@ -220,14 +220,12 @@ public class ToolManager {
         GraphicsContext gc = canvas.getGraphicsContext2D();
         gc.clearRect(0, 0, canvas.getWidth(), canvas.getHeight());
 
-        // 获取图像显示区域并设置 Canvas 大小
         javafx.geometry.Bounds displayBounds = controller.getImageManager().getImageDisplayBounds();
         if (displayBounds.getWidth() <= 0 || displayBounds.getHeight() <= 0) return;
 
         canvas.setWidth(displayBounds.getWidth());
         canvas.setHeight(displayBounds.getHeight());
 
-        // 转换图像坐标到 Canvas 坐标
         double[] startCoords = imageToCanvasCoordinates(imageX, imageY, canvas);
         double[] endCoords = imageToCanvasCoordinates(imageX + imageWidth, imageY + imageHeight, canvas);
 
@@ -244,117 +242,44 @@ public class ToolManager {
         gc.setStroke(Color.rgb(0, 150, 255, 0.8));
         gc.setLineWidth(2);
         gc.strokeRect(canvasX, canvasY, canvasWidth, canvasHeight);
-
-        // 绘制角点
-        gc.setFill(Color.WHITE);
-        gc.setStroke(Color.rgb(0, 150, 255, 0.8));
-
-        double cornerSize = 8;
-
-        // 左上角
-        gc.fillRect(canvasX - cornerSize/2, canvasY - cornerSize/2, cornerSize, cornerSize);
-        gc.strokeRect(canvasX - cornerSize/2, canvasY - cornerSize/2, cornerSize, cornerSize);
-
-        // 右上角
-        gc.fillRect(canvasX + canvasWidth - cornerSize/2, canvasY - cornerSize/2, cornerSize, cornerSize);
-        gc.strokeRect(canvasX + canvasWidth - cornerSize/2, canvasY - cornerSize/2, cornerSize, cornerSize);
-
-        // 左下角
-        gc.fillRect(canvasX - cornerSize/2, canvasY + canvasHeight - cornerSize/2, cornerSize, cornerSize);
-        gc.strokeRect(canvasX - cornerSize/2, canvasY + canvasHeight - cornerSize/2, cornerSize, cornerSize);
-
-        // 右下角
-        gc.fillRect(canvasX + canvasWidth - cornerSize/2, canvasY + canvasHeight - cornerSize/2, cornerSize, cornerSize);
-        gc.strokeRect(canvasX + canvasWidth - cornerSize/2, canvasY + canvasHeight - cornerSize/2, cornerSize, cornerSize);
     }
 
     private void endCropSelection(double x, double y) {
         if (cropSelection == null) return;
-
         double rectX = Math.min(cropStartX, x);
         double rectY = Math.min(cropStartY, y);
         double width = Math.abs(x - cropStartX);
         double height = Math.abs(y - cropStartY);
-
         cropSelection.setRect(rectX, rectY, width, height);
-        controller.updateStatus(String.format("裁剪区域: (%.0f, %.0f) %.0f×%.0f",
-                rectX, rectY, width, height));
     }
 
     public void applyCrop() {
         if (cropSelection == null || controller.getImageManager().getCurrentImage() == null) {
-            controller.updateStatus("没有选择裁剪区域");
             return;
         }
 
-        // 转换为整数
         int x = (int) Math.round(cropSelection.getX());
         int y = (int) Math.round(cropSelection.getY());
         int width = (int) Math.round(cropSelection.getWidth());
         int height = (int) Math.round(cropSelection.getHeight());
 
-        // 确保最小尺寸
         if (width <= 2 || height <= 2) {
             controller.showWarning("区域太小", "裁剪区域至少需要3x3像素");
             return;
         }
 
-        // 创建裁剪操作
         try {
             CropOperation operation = new CropOperation(x, y, width, height);
             controller.getImageManager().applyOperation(operation, "裁剪图片");
-
-            // 清除选择
             cropSelection = null;
-
-            // 清理Canvas
-            Canvas canvas = controller.getSelectionCanvas();
-            if (canvas != null) {
-                GraphicsContext gc = canvas.getGraphicsContext2D();
-                gc.clearRect(0, 0, canvas.getWidth(), canvas.getHeight());
-            }
-
+            // 清理动作在 handleMouseReleased 的 finally 块中统一处理
             controller.updateStatus(String.format("裁剪完成: %dx%d", width, height));
-
         } catch (Exception e) {
             controller.showError("裁剪失败", e.getMessage());
         }
     }
 
-    private void clearCanvasImmediately(Canvas canvas) {
-        if (canvas == null) {
-            System.out.println("警告：canvas为null，无法清理");
-            return;
-        }
-
-        // 在JavaFX应用线程中执行清理
-        Platform.runLater(() -> {
-            GraphicsContext gc = canvas.getGraphicsContext2D();
-
-            // 方法1：清除整个画布
-            gc.clearRect(0, 0, canvas.getWidth(), canvas.getHeight());
-
-            // 方法2：用透明颜色填充
-            gc.setFill(Color.TRANSPARENT);
-            gc.fillRect(0, 0, canvas.getWidth(), canvas.getHeight());
-
-            // 方法3：重置画布大小（有时需要）
-            canvas.setWidth(0);
-            canvas.setHeight(0);
-
-            // 方法4：强制重绘画布
-            //canvas.requestLayout();
-
-            System.out.println("画布已清理，大小: " + canvas.getWidth() + "x" + canvas.getHeight());
-        });
-    }
-    private void showCropConfirmButton() {
-        // 在实际应用中，需要从UI中查找确认按钮并显示
-    }
-
-    private void hideCropConfirmButton() {
-        // 在实际应用中，需要从UI中查找确认按钮并隐藏
-    }
+    // ==================== 绘图逻辑 (画笔) ====================
 
     private void startDrawing(double x, double y) {
         currentBrushPoints.clear();
@@ -363,7 +288,6 @@ public class ToolManager {
 
     private void continueDrawing(double x, double y, Canvas canvas) {
         if (currentBrushPoints.isEmpty()) return;
-
         currentBrushPoints.add(new DrawingOperation.DrawingPoint((int)x, (int)y));
         drawBrushPreview(canvas);
     }
@@ -374,42 +298,38 @@ public class ToolManager {
         GraphicsContext gc = canvas.getGraphicsContext2D();
         gc.clearRect(0, 0, canvas.getWidth(), canvas.getHeight());
 
-        // 获取图像显示区域并设置 Canvas 大小
         javafx.geometry.Bounds displayBounds = controller.getImageManager().getImageDisplayBounds();
         if (displayBounds.getWidth() <= 0 || displayBounds.getHeight() <= 0) return;
 
         canvas.setWidth(displayBounds.getWidth());
         canvas.setHeight(displayBounds.getHeight());
 
-        // 设置画笔样式
         java.awt.Color color = currentBrushStyle.getColor();
         gc.setStroke(Color.rgb(color.getRed(), color.getGreen(), color.getBlue(),
                 color.getAlpha() / 255.0));
 
-        // 获取图像尺寸以计算缩放比例
+        // 计算缩放比例
         double imageWidth = controller.getImageManager().getCurrentImage().getWidth();
-        double imageHeight = controller.getImageManager().getCurrentImage().getHeight();
         double scaleX = displayBounds.getWidth() / imageWidth;
-        double scaleY = displayBounds.getHeight() / imageHeight;
-        double scale = Math.min(scaleX, scaleY);
 
-        gc.setLineWidth(currentBrushStyle.getThickness() * scale);
+        gc.setLineWidth(currentBrushStyle.getThickness() * scaleX);
         gc.setLineCap(StrokeLineCap.ROUND);
         gc.setLineJoin(StrokeLineJoin.ROUND);
 
         // 绘制线条
-        for (int i = 0; i < currentBrushPoints.size() - 1; i++) {
-            DrawingOperation.DrawingPoint p1 = currentBrushPoints.get(i);
-            DrawingOperation.DrawingPoint p2 = currentBrushPoints.get(i + 1);
+        gc.beginPath();
+        if (!currentBrushPoints.isEmpty()) {
+            DrawingOperation.DrawingPoint start = currentBrushPoints.get(0);
+            double[] startPt = imageToCanvasCoordinates(start.getX(), start.getY(), canvas);
+            gc.moveTo(startPt[0], startPt[1]);
 
-            // 转换为 Canvas 坐标
-            double x1 = p1.getX() * scaleX;
-            double y1 = p1.getY() * scaleY;
-            double x2 = p2.getX() * scaleX;
-            double y2 = p2.getY() * scaleY;
-
-            gc.strokeLine(x1, y1, x2, y2);
+            for (int i = 1; i < currentBrushPoints.size(); i++) {
+                DrawingOperation.DrawingPoint p = currentBrushPoints.get(i);
+                double[] pt = imageToCanvasCoordinates(p.getX(), p.getY(), canvas);
+                gc.lineTo(pt[0], pt[1]);
+            }
         }
+        gc.stroke();
     }
 
     private void endDrawing() {
@@ -420,10 +340,7 @@ public class ToolManager {
     }
 
     private void applyCurrentDrawing() {
-        if (currentBrushPoints.size() < 2) {
-            controller.showWarning("绘图", "请先绘制一些内容");
-            return;
-        }
+        if (currentBrushPoints.size() < 2) return;
 
         DrawingOperation.DrawingElement element = new DrawingOperation.DrawingElement(
                 DrawingOperation.DrawingType.BRUSH,
@@ -435,10 +352,10 @@ public class ToolManager {
 
         DrawingOperation operation = new DrawingOperation(element);
         controller.getImageManager().applyOperation(operation, "画笔绘制");
-
-        currentBrushPoints.clear();
         controller.updateStatus("绘图已应用");
     }
+
+    // ==================== 绘图逻辑 (形状) ====================
 
     private void startShapeDrawing(double x, double y) {
         shapeStartX = x;
@@ -450,7 +367,6 @@ public class ToolManager {
 
     private void updateShapeDrawing(double x, double y, Canvas canvas) {
         if (currentBrushPoints.size() < 2) return;
-
         currentBrushPoints.set(1, new DrawingOperation.DrawingPoint((int)x, (int)y));
         drawShapePreview(canvas);
     }
@@ -461,7 +377,6 @@ public class ToolManager {
         GraphicsContext gc = canvas.getGraphicsContext2D();
         gc.clearRect(0, 0, canvas.getWidth(), canvas.getHeight());
 
-        // 获取图像显示区域并设置 Canvas 大小
         javafx.geometry.Bounds displayBounds = controller.getImageManager().getImageDisplayBounds();
         if (displayBounds.getWidth() <= 0 || displayBounds.getHeight() <= 0) return;
 
@@ -471,28 +386,23 @@ public class ToolManager {
         DrawingOperation.DrawingPoint p1 = currentBrushPoints.get(0);
         DrawingOperation.DrawingPoint p2 = currentBrushPoints.get(1);
 
-        // 获取图像尺寸以计算缩放比例
-        double imageWidth = controller.getImageManager().getCurrentImage().getWidth();
-        double imageHeight = controller.getImageManager().getCurrentImage().getHeight();
-        double scaleX = displayBounds.getWidth() / imageWidth;
-        double scaleY = displayBounds.getHeight() / imageHeight;
+        double[] pt1 = imageToCanvasCoordinates(p1.getX(), p1.getY(), canvas);
+        double[] pt2 = imageToCanvasCoordinates(p2.getX(), p2.getY(), canvas);
 
-        // 转换为 Canvas 坐标
-        double x1 = p1.getX() * scaleX;
-        double y1 = p1.getY() * scaleY;
-        double x2 = p2.getX() * scaleX;
-        double y2 = p2.getY() * scaleY;
+        double x = Math.min(pt1[0], pt2[0]);
+        double y = Math.min(pt1[1], pt2[1]);
+        double width = Math.abs(pt2[0] - pt1[0]);
+        double height = Math.abs(pt2[1] - pt1[1]);
 
-        double x = Math.min(x1, x2);
-        double y = Math.min(y1, y2);
-        double width = Math.abs(x2 - x1);
-        double height = Math.abs(y2 - y1);
-
-        // 设置画笔样式
         java.awt.Color color = currentBrushStyle.getColor();
         gc.setStroke(Color.rgb(color.getRed(), color.getGreen(), color.getBlue(),
                 color.getAlpha() / 255.0));
-        gc.setLineWidth(currentBrushStyle.getThickness() * Math.min(scaleX, scaleY));
+
+        // 计算粗细的显示比例
+        double imageWidth = controller.getImageManager().getCurrentImage().getWidth();
+        double scaleX = displayBounds.getWidth() / imageWidth;
+        gc.setLineWidth(currentBrushStyle.getThickness() * scaleX);
+
         gc.setLineDashes(0);
 
         switch (currentToolMode) {
@@ -521,14 +431,9 @@ public class ToolManager {
 
         DrawingOperation.DrawingType type;
         switch (currentToolMode) {
-            case DRAW_RECT:
-                type = DrawingOperation.DrawingType.RECTANGLE;
-                break;
-            case DRAW_CIRCLE:
-                type = DrawingOperation.DrawingType.CIRCLE;
-                break;
-            default:
-                return;
+            case DRAW_RECT: type = DrawingOperation.DrawingType.RECTANGLE; break;
+            case DRAW_CIRCLE: type = DrawingOperation.DrawingType.CIRCLE; break;
+            default: return;
         }
 
         DrawingOperation.DrawingElement element = new DrawingOperation.DrawingElement(
@@ -542,17 +447,23 @@ public class ToolManager {
         DrawingOperation operation = new DrawingOperation(element);
         controller.getImageManager().applyOperation(operation,
                 type == DrawingOperation.DrawingType.RECTANGLE ? "绘制矩形" : "绘制圆形");
-
-        currentBrushPoints.clear();
     }
 
+    // ==================== 文字工具 ====================
+
     private void addTextAtPosition(int x, int y) {
+        // 调用 DialogManager 显示输入框
         controller.getDialogManager().showTextInputDialog("添加文字", "输入要添加的文字:",
                 "", text -> {
                     if (text != null && !text.isEmpty()) {
+
+                        // 使用画笔粗细作为字体大小
+                        int fontSize = currentBrushStyle.getThickness();
+                        if (fontSize < 10) fontSize = 10;
+
                         DrawingOperation.TextStyle textStyle = new DrawingOperation.TextStyle(
                                 getSystemChineseFont(),
-                                24,
+                                fontSize,
                                 currentBrushStyle.getColor(),
                                 false, false, false);
 
@@ -573,31 +484,26 @@ public class ToolManager {
     }
 
     private String getSystemChineseFont() {
-        String[] chineseFonts = {
-                "Microsoft YaHei",
-                "PingFang SC",
-                "Noto Sans CJK SC",
-                "SimHei",
-                "SimSun",
-                "NSimSun",
-                "KaiTi",
-                "FangSong",
-                "Microsoft JhengHei",
-                "STXihei",
-                "STSong",
-                "STKaiti",
-                "STFangsong"
-        };
-
-        // 在实际应用中，需要检查系统字体
         return "Microsoft YaHei";
     }
 
-    private double[] imageToCanvasCoordinates(double imageX, double imageY, Canvas canvas) {
-        // 获取图像显示区域
-        javafx.geometry.Bounds displayBounds = controller.getImageManager().getImageDisplayBounds();
+    // ==================== 其他工具 ====================
 
-        // 获取图像原始尺寸
+    public void clearDrawing() {
+        currentBrushPoints.clear();
+        clearSelectionCanvasImmediately();
+        controller.updateStatus("当前绘图已清除");
+    }
+
+    private void clearSelection() {
+        cropSelection = null;
+        currentBrushPoints.clear();
+        isDrawing = false;
+        clearSelectionCanvasImmediately();
+    }
+
+    private double[] imageToCanvasCoordinates(double imageX, double imageY, Canvas canvas) {
+        javafx.geometry.Bounds displayBounds = controller.getImageManager().getImageDisplayBounds();
         double imageWidth = controller.getImageManager().getCurrentImage().getWidth();
         double imageHeight = controller.getImageManager().getCurrentImage().getHeight();
 
@@ -605,49 +511,42 @@ public class ToolManager {
             return new double[]{imageX, imageY};
         }
 
-        // 计算缩放比例
         double scaleX = displayBounds.getWidth() / imageWidth;
         double scaleY = displayBounds.getHeight() / imageHeight;
 
-        // 转换为 Canvas 坐标
-        double canvasX = imageX * scaleX;
-        double canvasY = imageY * scaleY;
-
-        return new double[]{canvasX, canvasY};
+        return new double[]{imageX * scaleX, imageY * scaleY};
     }
 
-    public void clearDrawing() {
-        currentBrushPoints.clear();
-        clearDrawingPreview(controller.getSelectionCanvas());
-        controller.updateStatus("当前绘图已清除");
+    /**
+     * 设置画笔颜色
+     */
+    public void setBrushColor(Color fxColor) {
+        java.awt.Color awtColor = new java.awt.Color(
+                (float) fxColor.getRed(),
+                (float) fxColor.getGreen(),
+                (float) fxColor.getBlue(),
+                (float) fxColor.getOpacity()
+        );
+
+        this.currentBrushStyle = new DrawingOperation.BrushStyle(
+                awtColor,
+                this.currentBrushStyle.getThickness(),
+                this.currentBrushStyle.getOpacity()
+        );
     }
 
-    // 新增：清理绘图预览
-    private void clearDrawingPreview(Canvas canvas) {
-        if (canvas != null) {
-            GraphicsContext gc = canvas.getGraphicsContext2D();
-            gc.clearRect(0, 0, canvas.getWidth(), canvas.getHeight());
-        }
-    }
-    // 新增：统一的画布清理方法
-    private void clearSelectionCanvas() {
-        Canvas canvas = controller.getSelectionCanvas();
-        if (canvas != null) {
-            System.out.println("清理选择画布 - 大小: " + canvas.getWidth() + "x" + canvas.getHeight());
-            GraphicsContext gc = canvas.getGraphicsContext2D();
-            gc.clearRect(0, 0, canvas.getWidth(), canvas.getHeight());
-            // 重置画布大小
-            canvas.setWidth(0);
-            canvas.setHeight(0);
-        } else {
-            System.out.println("警告：选择画布为null！");
-        }
+    /**
+     * 设置画笔粗细 (同时影响字体大小)
+     */
+    public void setBrushSize(Number size) {
+        this.currentBrushStyle = new DrawingOperation.BrushStyle(
+                this.currentBrushStyle.getColor(),
+                size.intValue(),
+                this.currentBrushStyle.getOpacity()
+        );
     }
 
-    private void clearSelection() {
-        cropSelection = null;
-        currentBrushPoints.clear();
-        isDrawing = false;
-        clearDrawingPreview(controller.getSelectionCanvas());
+    public DrawingOperation.BrushStyle getCurrentBrushStyle() {
+        return currentBrushStyle;
     }
 }

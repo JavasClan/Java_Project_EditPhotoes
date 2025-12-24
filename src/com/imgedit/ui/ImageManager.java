@@ -29,6 +29,7 @@ public class ImageManager {
     // 图像数据
     private BufferedImage currentBufferedImage;
     private Image currentImage;
+    private Image originalImage;
 
     private File currentImageFile;
     private double currentZoom = 1.0;
@@ -67,6 +68,7 @@ public class ImageManager {
             loadImage(file);
         }
     }
+    public Image getOriginalImage() { return originalImage; }
 
     public void loadImage(File file) {
         controller.showProgress("正在加载图片...");
@@ -76,6 +78,7 @@ public class ImageManager {
                 Image image = new Image(file.toURI().toString());
                 currentImageFile = file;
                 currentImage = image;
+                originalImage = image;
                 currentBufferedImage = ImageUtils.fxImageToBufferedImage(currentImage);
 
                 Platform.runLater(() -> {

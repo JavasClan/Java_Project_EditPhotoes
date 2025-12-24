@@ -1,13 +1,16 @@
 package imgedit.ui;
+
 import imgedit.core.operations.*;
 import javafx.animation.*;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import javafx.geometry.Orientation;
 import javafx.scene.Scene;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.control.*;
 import javafx.scene.effect.*;
+import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.image.WritableImage;
 import javafx.scene.layout.*;
@@ -17,14 +20,7 @@ import javafx.scene.paint.ImagePattern;
 import java.io.File;
 
 import javafx.scene.Node;
-
 import javafx.scene.SnapshotParameters;
-import javafx.scene.layout.*;
-import javafx.scene.control.*;
-import javafx.scene.effect.DropShadow;
-import javafx.geometry.*;
-import javafx.scene.input.*;
-import javafx.animation.*;
 
 /**
  * UI组件创建和管理器
@@ -107,9 +103,11 @@ public class UIManager {
         // 功能按钮
         Button undoBtn = createTopBarIconButton("↩", "撤销");
         undoBtn.setOnAction(e -> controller.getImageManager().undo());
+        undoBtn.setStyle("-fx-text-fill: #333333;"); // 强制深色字体
 
         Button redoBtn = createTopBarIconButton("↪", "重做");
         redoBtn.setOnAction(e -> controller.getImageManager().redo());
+        redoBtn.setStyle("-fx-text-fill: #333333;"); // 强制深色字体
 
         Button openBtn = createTopBarIconButton("📂", "打开");
         openBtn.setOnAction(e -> controller.getImageManager().openImage());
@@ -144,14 +142,13 @@ public class UIManager {
         return topBar;
     }
 
-    // 添加专门用于顶部工具栏的按钮创建方法
     private Button createTopBarIconButton(String icon, String tooltip) {
         Button btn = new Button(icon);
         btn.setTooltip(new Tooltip(tooltip));
         btn.setStyle("-fx-font-size: 18px; " +
                 "-fx-background-color: transparent; " +
                 "-fx-border-color: transparent; " +
-                "-fx-text-fill: white; " + // 深色模式默认白色
+                "-fx-text-fill: white; " +
                 "-fx-padding: 8; " +
                 "-fx-cursor: hand; " +
                 "-fx-border-radius: 6; " +
@@ -356,12 +353,16 @@ public class UIManager {
         return btn;
     }
 
+    // === 修复与美化后的画笔设置面板 ===
     private VBox createDrawingSettingsPanel() {
         VBox panel = new VBox(10);
         panel.setPadding(new Insets(15));
-        panel.setStyle("-fx-background-color: rgba(0,0,0,0.05); -fx-background-radius: 8;");
+        // 添加 CSS 类以便美化
+        panel.getStyleClass().add("settings-panel");
+        // 保留一个默认样式作为兜底
+        panel.setStyle("-fx-background-color: rgba(255,255,255,0.6); -fx-background-radius: 8;");
 
-        Label settingsLabel = new Label("画笔设置");
+        Label settingsLabel = new Label("画笔/文字设置");
         settingsLabel.setStyle("-fx-font-size: 13px; -fx-font-weight: bold;");
 
         // 颜色选择
@@ -370,21 +371,32 @@ public class UIManager {
 
         Label colorLabel = new Label("颜色:");
         ColorPicker colorPicker = new ColorPicker(Color.BLACK);
+        colorPicker.getStyleClass().add("color-picker"); // CSS类
+
+        colorPicker.valueProperty().addListener((obs, oldVal, newVal) -> {
+            controller.getToolManager().setBrushColor(newVal);
+        });
+
         colorBox.getChildren().addAll(colorLabel, colorPicker);
 
-        // 画笔大小
+        // 大小选择
         HBox sizeBox = new HBox(10);
         sizeBox.setAlignment(Pos.CENTER_LEFT);
+        Label sizeLabel = new Label("大小:");
 
-        Label sizeLabel = new Label("粗细:");
-        Spinner<Integer> brushSizeSpinner = new Spinner<>(1, 50, 3);
+        // 【关键修复】将最大值从 50 改为 300，解决大图文字太小的问题
+        Spinner<Integer> brushSizeSpinner = new Spinner<>(1, 300, 24);
         brushSizeSpinner.setEditable(true);
+        brushSizeSpinner.getStyleClass().add("spinner"); // CSS类
+
+        // 监听器必须在定义之后
+        brushSizeSpinner.valueProperty().addListener((obs, oldVal, newVal) -> {
+            controller.getToolManager().setBrushSize(newVal);
+        });
+
         sizeBox.getChildren().addAll(sizeLabel, brushSizeSpinner);
 
-        Button clearDrawingBtn = new Button("🗑️ 清除当前绘图");
-        clearDrawingBtn.setOnAction(e -> controller.getToolManager().clearDrawing());
-
-        panel.getChildren().addAll(settingsLabel, colorBox, sizeBox, clearDrawingBtn);
+        panel.getChildren().addAll(settingsLabel, colorBox, sizeBox);
         return panel;
     }
 
@@ -561,8 +573,21 @@ public class UIManager {
         Button zoomFit = createIconButton("⛶", "适应窗口");
         zoomFit.setOnAction(e -> controller.getImageManager().fitToWindow());
 
-//        Button zoom100 = createIconButton("1:1", "原始大小");
-//        zoom100.setOnAction(e -> controller.getImageManager().resetZoom());
+        // 对比按钮
+        Button compareBtn = createIconButton(" 👁 ", "长按对比");
+        compareBtn.setOnMousePressed(e -> {
+            Image original = controller.getImageManager().getOriginalImage();
+            if (original != null) {
+                imageView.setImage(original);
+            }
+        });
+
+        compareBtn.setOnMouseReleased(e -> {
+            Image current = controller.getImageManager().getCurrentImage();
+            if (current != null) {
+                imageView.setImage(current);
+            }
+        });
 
         Button confirmCropBtn = createIconButton("✓", "确认裁剪");
         confirmCropBtn.setVisible(false);
@@ -570,7 +595,7 @@ public class UIManager {
         confirmCropBtn.setStyle("-fx-background-color: #2ecc71; -fx-text-fill: white; " +
                 "-fx-background-radius: 50;");
 
-        controlButtons.getChildren().addAll(zoomIn, zoomOut, zoomFit, confirmCropBtn);
+        controlButtons.getChildren().addAll(zoomIn, zoomOut, zoomFit, compareBtn, confirmCropBtn);
         return controlButtons;
     }
 
@@ -662,9 +687,10 @@ public class UIManager {
         infoGrid.setHgap(15);
         infoGrid.setVgap(10);
 
-//        addInfoRow(infoGrid, 0, "📏 尺寸", "size-label", "-- x --");
-//        addInfoRow(infoGrid, 1, "📁 格式", "format-label", "--");
-//        addInfoRow(infoGrid, 2, "💾 大小", "filesize-label", "-- MB");
+        // 显示图像信息
+        addInfoRow(infoGrid, 0, "📏 尺寸", "size-label", "-- x --");
+        addInfoRow(infoGrid, 1, "📁 格式", "format-label", "--");
+        addInfoRow(infoGrid, 2, "💾 大小", "filesize-label", "-- KB");
 
         VBox infoCard = createCard("ℹ️ 图像档案", infoGrid);
 
@@ -698,6 +724,37 @@ public class UIManager {
 
         grid.add(t, 0, row);
         grid.add(v, 1, row);
+    }
+
+    // 更新图像信息
+    public void updateImageInfo() {
+        if (controller.getImageManager().getCurrentImage() == null) return;
+
+        Image img = controller.getImageManager().getCurrentImage();
+        Label sizeLbl = (Label) controller.getRoot().lookup("#size-label");
+        Label formatLbl = (Label) controller.getRoot().lookup("#format-label");
+        Label fileLbl = (Label) controller.getRoot().lookup("#filesize-label");
+
+        if (sizeLbl != null) {
+            sizeLbl.setText((int)img.getWidth() + " x " + (int)img.getHeight());
+        }
+
+        try {
+            File file = controller.getImageManager().getCurrentImageFile();
+            if (file != null) {
+                if (formatLbl != null) {
+                    String name = file.getName();
+                    String ext = name.contains(".") ? name.substring(name.lastIndexOf(".") + 1).toUpperCase() : "UNK";
+                    formatLbl.setText(ext);
+                }
+                if (fileLbl != null) {
+                    long sizeKB = file.length() / 1024;
+                    fileLbl.setText(sizeKB + " KB");
+                }
+            }
+        } catch (Exception e) {
+            // 忽略文件信息错误
+        }
     }
 
     public HBox createBottomBar() {
@@ -739,7 +796,6 @@ public class UIManager {
         Button btn = new Button(icon);
         btn.setTooltip(new Tooltip(tooltip));
 
-        // 简化样式，避免复杂计算
         btn.setStyle("-fx-font-size: 16px; " +
                 "-fx-background-color: rgba(255,255,255,0.1); " +
                 "-fx-border-color: rgba(255,255,255,0.2); " +
@@ -749,7 +805,6 @@ public class UIManager {
                 "-fx-border-radius: 50%; " +
                 "-fx-background-radius: 50%;");
 
-        // 悬停效果
         btn.setOnMouseEntered(e -> {
             btn.setStyle("-fx-font-size: 16px; " +
                     "-fx-background-color: rgba(255,255,255,0.2); " +
@@ -778,16 +833,13 @@ public class UIManager {
     public Button createOperationButton(String text) {
         Button btn = new Button(text);
 
-        // 添加样式类，便于主题切换时识别
         btn.getStyleClass().add("operation-button");
 
-        // 深色模式下的样式
         String backgroundColor = "#2d2d2d";
         String hoverColor = "#3d3d3d";
         String borderColor = "#444";
         String textColor = "#ffffff";
 
-        // 初始样式
         btn.setStyle("-fx-background-color: " + backgroundColor + "; " +
                 "-fx-border-color: " + borderColor + "; " +
                 "-fx-border-radius: 6; -fx-background-radius: 6; " +
@@ -884,7 +936,6 @@ public class UIManager {
             String style = controller.getThemeManager().getThemeStyle(theme);
             controller.getRoot().setStyle(style);
 
-            // 更新滚动条样式
             controller.getRoot().lookupAll(".scroll-bar").forEach(node ->
                     node.setStyle("-fx-background-color: transparent; -fx-block-increment: 0;"));
 
@@ -915,7 +966,6 @@ public class UIManager {
                 color = "#022c22";
             }
 
-            // 应用棋盘格背景
             centerPane.setBackground(createCheckerboardBackground(color));
         }
     }
@@ -926,12 +976,10 @@ public class UIManager {
         String textColor = controller.getThemeManager().getTextColor(theme);
         String titleColor = controller.getThemeManager().getTitleColor(theme);
 
-        // 应用全局背景
         if (controller.getRoot() != null) {
             controller.getRoot().setStyle("-fx-background-color: " + mainBg + ";");
         }
 
-        // 递归更新所有节点样式
         updateRecursiveStyle(controller.getRoot(), cardBg, textColor, titleColor, theme);
     }
 
@@ -954,7 +1002,6 @@ public class UIManager {
         if (node instanceof javafx.scene.Parent) {
             javafx.scene.Parent parent = (javafx.scene.Parent) node;
 
-            // 底部悬浮胶囊
             if ("bottom-capsule".equals(node.getId())) {
                 if (theme == ThemeManager.Theme.LIGHT_MODE) {
                     node.setStyle("-fx-background-color: rgba(255, 255, 255, 0.85); " +
@@ -971,7 +1018,6 @@ public class UIManager {
                 }
             }
 
-            // 侧边栏标题
             else if (node.getStyleClass().contains("sidebar-header")) {
                 if (node instanceof Label) {
                     Label title = (Label) node;
@@ -988,7 +1034,6 @@ public class UIManager {
                 }
             }
 
-            // 上传占位符
             else if ("placeholder".equals(node.getId())) {
                 if (theme == ThemeManager.Theme.LIGHT_MODE) {
                     node.setStyle("-fx-background-color: rgba(255, 235, 242, 0.7); " +
@@ -1010,7 +1055,6 @@ public class UIManager {
                 }
             }
 
-            // 卡片背景
             else if ("content-card".equals(node.getId())) {
                 node.setStyle("-fx-background-color: " + cardBg + "; " +
                         "-fx-background-radius: 16; " +
@@ -1018,22 +1062,18 @@ public class UIManager {
                         "-fx-padding: 20;");
             }
 
-            // 标签样式
             if (node instanceof Label) {
                 updateLabelStyle((Label) node, theme, textColor, titleColor);
             }
 
-            // 按钮样式
             if (node instanceof Button) {
                 updateButtonStyle((Button) node, theme);
             }
 
-            // 分隔符样式
             if (node instanceof Separator) {
                 updateSeparatorStyle((Separator) node, theme);
             }
 
-            // 递归更新子节点
             for (Node child : parent.getChildrenUnmodifiable()) {
                 updateRecursiveStyle(child, cardBg, textColor, titleColor, theme);
             }
@@ -1041,7 +1081,6 @@ public class UIManager {
     }
 
     private void updateLabelStyle(Label label, ThemeManager.Theme theme, String textColor, String titleColor) {
-        // 获取当前主题的文本颜色（从ThemeManager获取正确的对比色）
         String themeTextColor = controller.getThemeManager().getTextColor(theme);
         String themeTitleColor = controller.getThemeManager().getTitleColor(theme);
 
@@ -1050,48 +1089,37 @@ public class UIManager {
         if (label.getStyleClass().contains("sidebar-header") ||
                 label.getStyleClass().contains("app-logo-text") ||
                 label.getStyleClass().contains("app-logo-icon")) {
-            // 应用主题的标题颜色
             label.setStyle("-fx-text-fill: " + themeTitleColor + "; -fx-font-weight: bold;");
         } else if (label.getStyleClass().contains("upload-hint-title")) {
-            // 上传提示标题 - 使用主题文本颜色
             label.setStyle("-fx-font-size: 24px; -fx-font-weight: bold; -fx-text-fill: " + themeTitleColor + ";");
         } else if (label.getStyleClass().contains("upload-hint-sub")) {
-            // 上传提示副标题 - 使用稍淡的主题文本颜色
             label.setStyle("-fx-font-size: 14px; -fx-text-fill: " + themeTextColor + "; -fx-opacity: 0.8;");
         } else if (label.getStyleClass().contains("upload-icon")) {
-            // 上传图标 - 使用主题标题颜色，透明度稍低
             label.setStyle("-fx-font-size: 80px; -fx-text-fill: " + themeTitleColor + "; -fx-opacity: 0.6;");
         } else if ("card-title".equals(label.getId())) {
-            // 卡片标题 - 使用主题标题颜色
             label.setStyle("-fx-text-fill: " + themeTitleColor + "; -fx-font-weight: bold; -fx-font-size: 15px;");
         } else if (label.getId() != null && label.getId().contains("value")) {
-            // 值标签（如亮度值、对比度值） - 使用主题文本颜色
             String bgColor = controller.getThemeManager().isDarkTheme(theme) ?
                     "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.06)";
             label.setStyle("-fx-text-fill: " + themeTextColor + "; -fx-background-color: " + bgColor + "; " +
                     "-fx-background-radius: 4; -fx-padding: 2 6; " +
                     "-fx-font-family: 'Consolas', monospace;");
         } else {
-            // 默认标签 - 使用主题文本颜色
             label.setStyle("-fx-text-fill: " + themeTextColor + ";");
         }
     }
 
     private void updateButtonStyle(Button button, ThemeManager.Theme theme) {
-        // 跳过控制条的小按钮
         if (button.getParent() != null && "control-buttons".equals(button.getParent().getId())) {
             return;
         }
 
-        // 获取按钮文本
         String buttonText = button.getText();
 
-        // 顶部工具栏图标按钮的特殊处理
         if (buttonText != null && (buttonText.contains("↩") || buttonText.contains("↪") ||
                 buttonText.contains("📂") || buttonText.contains("🌗") || buttonText.contains("?"))) {
 
             String backgroundColor = isDarkMode ? "rgba(40, 40, 40, 0.9)" : "rgba(255, 255, 255, 0.9)";
-            String hoverColor = isDarkMode ? "rgba(60, 60, 60, 1)" : "rgba(245, 245, 245, 1)";
             String borderColor = isDarkMode ? "#666" : "#dee2e6";
             String textColor = isDarkMode ? "white" : "#2c3e50";
 
@@ -1105,11 +1133,9 @@ public class UIManager {
             return;
         }
 
-        // 普通按钮使用主题渐变
         String gradient = controller.getThemeManager().getThemeGradient(theme);
         String btnTextColor = controller.getThemeManager().getButtonTextColor(theme);
 
-        // 如果是操作按钮
         if (button.getStyleClass().contains("operation-button")) {
             String backgroundColor = isDarkMode ? "#2d2d2d" : "#f8f9fa";
             String hoverColor = isDarkMode ? "#3d3d3d" : "#e9ecef";
@@ -1121,7 +1147,6 @@ public class UIManager {
                     "-fx-padding: 8 12; -fx-cursor: hand; " +
                     "-fx-text-fill: " + btnTextColor + ";");
 
-            // 更新悬停事件
             button.setOnMouseEntered(e -> {
                 button.setStyle("-fx-background-color: " + hoverColor + "; " +
                         "-fx-border-color: " + borderColor + "; " +
@@ -1141,7 +1166,6 @@ public class UIManager {
             return;
         }
 
-        // 其他按钮使用渐变背景
         button.setStyle("-fx-background-color: " + gradient + "; " +
                 "-fx-text-fill: " + btnTextColor + "; " +
                 "-fx-background-radius: 6; -fx-font-weight: bold; " +
@@ -1173,7 +1197,6 @@ public class UIManager {
         gc.setFill(baseColor);
         gc.fillRect(0, 0, size * 2, size * 2);
 
-        // 绘制淡淡的格纹
         Color checkColor = baseColor.grayscale().getBrightness() > 0.5 ?
                 baseColor.darker() : baseColor.brighter();
         gc.setFill(Color.color(checkColor.getRed(), checkColor.getGreen(), checkColor.getBlue(), 0.05));
@@ -1210,7 +1233,6 @@ public class UIManager {
             content.getChildren().addAll(pi, loadingText);
             loadingOverlay.getChildren().add(content);
 
-            // 添加到场景根节点
             if (controller.getMainScene() != null && controller.getMainScene().getRoot() instanceof Pane) {
                 Pane root = (Pane) controller.getMainScene().getRoot();
                 if (!root.getChildren().contains(loadingOverlay)) {
@@ -1235,7 +1257,6 @@ public class UIManager {
     // Toast显示
     public void showToast(String message, String type) {
         if (toastContainer == null) {
-            // 如果上面初始化没成功，这里做个兜底
             if (controller.getMainScene() != null && controller.getMainScene().getRoot() instanceof StackPane) {
                 toastContainer = new VBox(10);
                 toastContainer.setAlignment(Pos.BOTTOM_CENTER);
@@ -1243,21 +1264,18 @@ public class UIManager {
                 toastContainer.setMouseTransparent(true);
                 ((StackPane) controller.getMainScene().getRoot()).getChildren().add(toastContainer);
             } else {
-                return; // 无法显示
+                return;
             }
         }
 
-        // 创建Toast气泡
         Label toast = new Label(message);
         toast.getStyleClass().add("toast-message");
         toast.getStyleClass().add("toast-" + type);
 
         toast.setOpacity(0);
 
-        // 添加入队
         toastContainer.getChildren().add(toast);
 
-        // 动画序列
         FadeTransition fadeIn = new FadeTransition(Duration.millis(300), toast);
         fadeIn.setFromValue(0);
         fadeIn.setToValue(1);
@@ -1272,7 +1290,6 @@ public class UIManager {
         seq.play();
     }
 
-    // 调整应用方法
     private void applyAllAdjustments() {
         if (brightnessValue == 0 && contrastValue == 0 && saturationValue == 0) {
             controller.showWarning("提示", "请先调整滑块参数");
@@ -1287,7 +1304,6 @@ public class UIManager {
         contrastValue = 0.0;
         saturationValue = 0.0;
 
-        // 更新滑块显示
         Node brightnessSlider = controller.getRoot().lookup("#亮度-slider");
         Node contrastSlider = controller.getRoot().lookup("#对比度-slider");
         Node saturationSlider = controller.getRoot().lookup("#饱和度-slider");
