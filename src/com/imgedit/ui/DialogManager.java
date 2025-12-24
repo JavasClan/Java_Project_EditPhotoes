@@ -22,13 +22,16 @@ import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.geom.AffineTransform;
 import java.awt.image.BufferedImage;
+import java.awt.image.BufferedImageOp;
+import java.awt.image.ConvolveOp;
+import java.awt.image.Kernel;
 import java.io.File;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
 /**
- * 对话框管理器
+ * 对话框管理器 - 终极完整版 (包含所有修复和功能)
  */
 public class DialogManager {
 
@@ -38,7 +41,7 @@ public class DialogManager {
         this.controller = controller;
     }
 
-    // ==================== 1. 深度美化的通用弹窗 (Success/Error/Warning) ====================
+    // ==================== 1. 深度美化的通用弹窗 ====================
 
     public void showSuccess(String title, String message) {
         showStyledMessage(title, message, "success");
@@ -52,48 +55,31 @@ public class DialogManager {
         showStyledMessage(title, message, "error");
     }
 
-    /**
-     * 核心：创建一个无边框、带阴影的现代化弹窗
-     */
     private void showStyledMessage(String title, String message, String type) {
         Platform.runLater(() -> {
             Dialog<Void> dialog = new Dialog<>();
-            // 关键：去掉系统默认的丑陋边框和标题栏
             dialog.initStyle(StageStyle.TRANSPARENT);
 
-            // 1. 定义颜色和图标
             String iconChar;
             String colorHex;
             String headerColor;
 
             switch (type) {
                 case "success":
-                    iconChar = "✅";
-                    colorHex = "#10b981"; // 绿色
-                    headerColor = "#ecfdf5"; // 浅绿背景
-                    break;
+                    iconChar = "✅"; colorHex = "#10b981"; headerColor = "#ecfdf5"; break;
                 case "error":
-                    iconChar = "❌";
-                    colorHex = "#ef4444"; // 红色
-                    headerColor = "#fef2f2"; // 浅红背景
-                    break;
+                    iconChar = "❌"; colorHex = "#ef4444"; headerColor = "#fef2f2"; break;
                 case "warning":
                 default:
-                    iconChar = "⚠️";
-                    colorHex = "#f59e0b"; // 橙色
-                    headerColor = "#fffbeb"; // 浅橙背景
-                    break;
+                    iconChar = "⚠️"; colorHex = "#f59e0b"; headerColor = "#fffbeb"; break;
             }
 
-            // 2. 构建主容器 (模仿卡片)
-            VBox root = new VBox(0); // 间距0，因为我们要分header和body
+            VBox root = new VBox(0);
             root.setAlignment(Pos.CENTER);
             root.setPrefWidth(360);
             root.setStyle("-fx-background-color: white; -fx-background-radius: 12; -fx-border-radius: 12; -fx-border-color: rgba(0,0,0,0.1); -fx-border-width: 1;");
-            // 添加卡片阴影
             root.setEffect(new DropShadow(20, Color.rgb(0, 0, 0, 0.15)));
 
-            // 3. 头部区域 (带颜色背景)
             VBox headerBox = new VBox(10);
             headerBox.setAlignment(Pos.CENTER);
             headerBox.setPadding(new Insets(20, 20, 10, 20));
@@ -101,13 +87,10 @@ public class DialogManager {
 
             Label icon = new Label(iconChar);
             icon.setStyle("-fx-font-size: 40px; -fx-font-family: 'Segoe UI Emoji';");
-
             Label titleLbl = new Label(title);
             titleLbl.setStyle("-fx-font-size: 18px; -fx-font-weight: bold; -fx-text-fill: #1f2937;");
-
             headerBox.getChildren().addAll(icon, titleLbl);
 
-            // 4. 内容区域
             VBox bodyBox = new VBox(20);
             bodyBox.setAlignment(Pos.CENTER);
             bodyBox.setPadding(new Insets(20));
@@ -118,29 +101,21 @@ public class DialogManager {
             msgLbl.setAlignment(Pos.CENTER);
             msgLbl.setStyle("-fx-font-size: 14px; -fx-text-fill: #4b5563; -fx-text-alignment: CENTER;");
 
-            // 5. 按钮
             Button okBtn = new Button("我知道了");
             okBtn.setPrefWidth(120);
-            // 按钮样式
             String btnStyle = "-fx-background-color: " + colorHex + "; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 20; -fx-cursor: hand; -fx-padding: 8 20;";
             okBtn.setStyle(btnStyle);
-
-            // 按钮动效
             okBtn.setOnMouseEntered(e -> okBtn.setOpacity(0.9));
             okBtn.setOnMouseExited(e -> okBtn.setOpacity(1.0));
             okBtn.setOnAction(e -> dialog.close());
 
             bodyBox.getChildren().addAll(msgLbl, okBtn);
-
             root.getChildren().addAll(headerBox, bodyBox);
 
-            // 设置 DialogPane
             dialog.getDialogPane().setContent(root);
-            // 必须要加这一句，让 DialogPane 背景透明，否则会有白色直角底
             dialog.getDialogPane().setStyle("-fx-background-color: transparent;");
-
-            // 必须添加一个 ButtonType 才能正常显示，但我们把它隐藏
             dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
+
             Node closeButton = dialog.getDialogPane().lookupButton(ButtonType.CLOSE);
             if (closeButton != null) {
                 closeButton.setVisible(false);
@@ -151,7 +126,7 @@ public class DialogManager {
         });
     }
 
-    // ==================== 2. 批量处理模块 (修复样式逻辑) ====================
+    // ==================== 2. 批量处理模块 (功能全开) ====================
 
     public void showBatchProcessingDialog() {
         FileChooser fileChooser = new FileChooser();
@@ -169,7 +144,6 @@ public class DialogManager {
     private void showBatchProcessingDialog(List<File> files) {
         Dialog<Void> dialog = new Dialog<>();
         dialog.setTitle("批量工坊");
-
         applyMainStyles(dialog);
 
         VBox root = new VBox(15);
@@ -181,7 +155,6 @@ public class DialogManager {
         scrollPane.setPrefHeight(600);
         scrollPane.setStyle("-fx-background-color:transparent;");
 
-        // 标题
         VBox header = new VBox(5);
         header.setAlignment(Pos.CENTER);
         Label icon = new Label("🏭");
@@ -192,7 +165,6 @@ public class DialogManager {
         subtitle.setStyle("-fx-text-fill: #667eea;");
         header.getChildren().addAll(icon, title, subtitle);
 
-        // --- 选项区域 ---
         VBox optionsBox = new VBox(12);
         optionsBox.setStyle("-fx-background-color: #f9fafb; -fx-padding: 15; -fx-background-radius: 8; -fx-border-color: #e5e7eb;");
 
@@ -216,18 +188,23 @@ public class DialogManager {
 
         // 3. 调整大小
         CheckBox resizeCb = new CheckBox("调整大小");
-        TextField wField = new TextField("");
-        wField.setPromptText("宽 (px)");
-        wField.setPrefWidth(80);
-        TextField hField = new TextField("");
-        hField.setPromptText("高 (px)");
-        hField.setPrefWidth(80);
+        TextField wField = new TextField(""); wField.setPromptText("宽 (px)"); wField.setPrefWidth(80);
+        TextField hField = new TextField(""); hField.setPromptText("高 (px)"); hField.setPrefWidth(80);
         HBox resizeBox = new HBox(10, resizeCb, new Label("W:"), wField, new Label("H:"), hField);
         resizeBox.setAlignment(Pos.CENTER_LEFT);
         bindFieldStyle(wField, resizeCb);
         bindFieldStyle(hField, resizeCb);
 
-        // 4. 滤镜
+        // 4. 艺术风格 (已加回！)
+        CheckBox artisticCb = new CheckBox("艺术风格");
+        ComboBox<String> styleCombo = new ComboBox<>();
+        styleCombo.getItems().addAll("油画", "素描", "马赛克", "卡通", "老照片");
+        styleCombo.getSelectionModel().selectFirst();
+        HBox artisticBox = new HBox(10, artisticCb, styleCombo);
+        artisticBox.setAlignment(Pos.CENTER_LEFT);
+        bindFieldStyle(styleCombo, artisticCb);
+
+        // 5. 滤镜
         CheckBox filterCb = new CheckBox("应用滤镜");
         ComboBox<String> filterCombo = new ComboBox<>();
         filterCombo.getItems().addAll("灰度化");
@@ -236,7 +213,7 @@ public class DialogManager {
         filterBox.setAlignment(Pos.CENTER_LEFT);
         bindFieldStyle(filterCombo, filterCb);
 
-        // 5. 输出格式
+        // 6. 格式转换
         CheckBox formatCb = new CheckBox("格式转换");
         ComboBox<String> formatCombo = new ComboBox<>();
         formatCombo.getItems().addAll("png", "jpg");
@@ -246,11 +223,9 @@ public class DialogManager {
         bindFieldStyle(formatCombo, formatCb);
 
         optionsBox.getChildren().addAll(
-                new Label("处理选项:"),
-                rotateBox, flipBox, resizeBox, filterBox, formatBox
+                new Label("处理选项:"), rotateBox, flipBox, resizeBox, artisticBox, filterBox, formatBox
         );
 
-        // --- 输出设置 ---
         VBox outBox = new VBox(10);
         outBox.setStyle("-fx-background-color: #f9fafb; -fx-padding: 15; -fx-background-radius: 8; -fx-border-color: #e5e7eb;");
 
@@ -273,7 +248,6 @@ public class DialogManager {
 
         outBox.getChildren().addAll(dirBox, suffixBox);
 
-        // 进度与按钮
         ProgressBar progressBar = new ProgressBar(0);
         progressBar.setMaxWidth(Double.MAX_VALUE);
         Label statusLabel = new Label("准备就绪");
@@ -289,7 +263,6 @@ public class DialogManager {
         dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
         dialog.getDialogPane().lookupButton(ButtonType.CLOSE).setVisible(false);
 
-        // --- 执行逻辑 ---
         startBtn.setOnAction(e -> {
             boolean doRotate = rotateCb.isSelected();
             int rotIdx = rotateCombo.getSelectionModel().getSelectedIndex();
@@ -300,7 +273,6 @@ public class DialogManager {
 
             boolean doResize = resizeCb.isSelected();
             int w = 0, h = 0;
-
             if (doResize) {
                 if (wField.getText().trim().isEmpty() || hField.getText().trim().isEmpty()) {
                     showError("参数错误", "请填写调整大小的宽度和高度！");
@@ -315,6 +287,9 @@ public class DialogManager {
             }
             final int finalW = w;
             final int finalH = h;
+
+            boolean doArtistic = artisticCb.isSelected();
+            String artisticStyle = styleCombo.getValue();
 
             boolean doFilter = filterCb.isSelected();
             boolean isGray = filterCombo.getValue().equals("灰度化");
@@ -342,6 +317,10 @@ public class DialogManager {
                             if (doRotate) image = processRotate(image, rotateAngle);
                             if (doFlip) image = processFlip(image, flipHorz);
                             if (doResize) image = processResize(image, finalW, finalH);
+
+                            // 艺术风格处理 (已加回！)
+                            if (doArtistic) image = processArtisticStyle(image, artisticStyle);
+
                             if (doFilter && isGray) image = processGrayscale(image);
 
                             String name = file.getName();
@@ -367,7 +346,6 @@ public class DialogManager {
                     startBtn.setDisable(false);
                     statusLabel.setText("完成！");
                     dialog.close();
-
                     showSuccess("批量完成", "成功处理 " + finalSuccess + " / " + total + " 张图片");
                 });
 
@@ -377,45 +355,27 @@ public class DialogManager {
         dialog.showAndWait();
     }
 
-    /**
-     * 【关键修复】绑定样式，强制设置高不透明度和深色文字
-     */
     private void bindFieldStyle(Control field, CheckBox checkBox) {
         field.disableProperty().bind(checkBox.selectedProperty().not());
-
-        checkBox.selectedProperty().addListener((obs, oldVal, newVal) -> {
-            updateDisabledStyle(field, !newVal);
-        });
-
-        // 初始化
+        checkBox.selectedProperty().addListener((obs, oldVal, newVal) -> updateDisabledStyle(field, !newVal));
         updateDisabledStyle(field, !checkBox.isSelected());
     }
 
     private void updateDisabledStyle(Control field, boolean isDisabled) {
         if (isDisabled) {
-            // 【核心修改】：opacity 强制 1.0，文字颜色纯黑，提示文字深灰，背景浅灰
-            // 这样即使控件处于 disabled 状态，依然清晰可见
-            field.setStyle("-fx-opacity: 1.0; " +
-                    "-fx-background-color: #eaeaea; " + // 稍深一点的灰，区分启用状态
-                    "-fx-text-fill: #000000; " +        // 纯黑文字
-                    "-fx-prompt-text-fill: #555555;");  // 深灰提示词
+            // 纯黑字，深灰提示，浅灰底 -> 清晰可见
+            field.setStyle("-fx-opacity: 1.0; -fx-background-color: #eaeaea; -fx-text-fill: #000000; -fx-prompt-text-fill: #555555;");
         } else {
-            // 启用状态：白底黑字
-            field.setStyle("-fx-opacity: 1.0; " +
-                    "-fx-background-color: white; " +
-                    "-fx-text-fill: #1f2937;");
+            field.setStyle("-fx-opacity: 1.0; -fx-background-color: white; -fx-text-fill: #1f2937;");
         }
     }
 
     // --- AWT 底层算法 ---
-
     private BufferedImage processRotate(BufferedImage src, int angle) {
         int w = src.getWidth();
         int h = src.getHeight();
         int newW = w, newH = h;
-        if (angle == 90 || angle == 270) {
-            newW = h; newH = w;
-        }
+        if (angle == 90 || angle == 270) { newW = h; newH = w; }
         BufferedImage res = new BufferedImage(newW, newH, src.getType() == 0 ? BufferedImage.TYPE_INT_ARGB : src.getType());
         Graphics2D g = res.createGraphics();
         AffineTransform at = new AffineTransform();
@@ -432,10 +392,8 @@ public class DialogManager {
         int h = src.getHeight();
         BufferedImage res = new BufferedImage(w, h, src.getType() == 0 ? BufferedImage.TYPE_INT_ARGB : src.getType());
         Graphics2D g = res.createGraphics();
-        int sx1 = horizontal ? w : 0;
-        int sy1 = horizontal ? 0 : h;
-        int sx2 = horizontal ? 0 : w;
-        int sy2 = horizontal ? h : 0;
+        int sx1 = horizontal ? w : 0; int sy1 = horizontal ? 0 : h;
+        int sx2 = horizontal ? 0 : w; int sy2 = horizontal ? h : 0;
         g.drawImage(src, 0, 0, w, h, sx1, sy1, sx2, sy2, null);
         g.dispose();
         return res;
@@ -458,7 +416,194 @@ public class DialogManager {
         return res;
     }
 
-    // ==================== 其他对话框 ====================
+    /**
+     * 原生实现的简易艺术风格滤镜
+     */
+    private BufferedImage processArtisticStyle(BufferedImage src, String styleName) {
+        int w = src.getWidth();
+        int h = src.getHeight();
+        BufferedImage res = new BufferedImage(w, h, BufferedImage.TYPE_INT_RGB);
+        Graphics2D g = res.createGraphics();
+        g.drawImage(src, 0, 0, null);
+        g.dispose();
+
+        switch (styleName) {
+            case "马赛克":
+                int blockSize = 15;
+                for (int y = 0; y < h; y += blockSize) {
+                    for (int x = 0; x < w; x += blockSize) {
+                        int pixel = res.getRGB(x, y);
+                        for (int by = 0; by < blockSize && y + by < h; by++) {
+                            for (int bx = 0; bx < blockSize && x + bx < w; bx++) {
+                                res.setRGB(x + bx, y + by, pixel);
+                            }
+                        }
+                    }
+                }
+                break;
+            case "素描":
+                BufferedImage gray = processGrayscale(src);
+                float[] edgeKernel = { 0f, -1f, 0f, -1f, 5f, -1f, 0f, -1f, 0f };
+                BufferedImageOp op = new ConvolveOp(new Kernel(3, 3, edgeKernel));
+                res = op.filter(gray, null);
+                break;
+            case "油画":
+                float[] blurKernel = { 0.1f, 0.1f, 0.1f, 0.1f, 0.2f, 0.1f, 0.1f, 0.1f, 0.1f };
+                BufferedImageOp blur = new ConvolveOp(new Kernel(3, 3, blurKernel));
+                res = blur.filter(src, null);
+                break;
+            case "卡通":
+                for (int y = 0; y < h; y++) {
+                    for (int x = 0; x < w; x++) {
+                        int rgb = src.getRGB(x, y);
+                        int r = (rgb >> 16) & 0xFF;
+                        int gVal = (rgb >> 8) & 0xFF;
+                        int b = rgb & 0xFF;
+                        r = (r / 64) * 64;
+                        gVal = (gVal / 64) * 64;
+                        b = (b / 64) * 64;
+                        int newPixel = (r << 16) | (gVal << 8) | b;
+                        res.setRGB(x, y, newPixel);
+                    }
+                }
+                break;
+            case "老照片":
+                for (int y = 0; y < h; y++) {
+                    for (int x = 0; x < w; x++) {
+                        int rgb = src.getRGB(x, y);
+                        int r = (rgb >> 16) & 0xFF;
+                        int gVal = (rgb >> 8) & 0xFF;
+                        int b = rgb & 0xFF;
+                        int tr = (int)(0.393*r + 0.769*gVal + 0.189*b);
+                        int tg = (int)(0.349*r + 0.686*gVal + 0.168*b);
+                        int tb = (int)(0.272*r + 0.534*gVal + 0.131*b);
+                        if(tr > 255) tr = 255; if(tg > 255) tg = 255; if(tb > 255) tb = 255;
+                        res.setRGB(x, y, (tr << 16) | (tg << 8) | tb);
+                    }
+                }
+                break;
+        }
+        return res;
+    }
+
+    // ==================== 3. 豆包图生图 (完整逻辑) ====================
+
+    public void showArkImageDialog() {
+        if (!controller.getArkManager().isAvailable()) {
+            showError("功能未就绪", "请检查config.properties配置");
+            return;
+        }
+        if (controller.getImageManager().getCurrentImageFile() == null) {
+            showError("提示", "请先在主界面加载一张参考图片");
+            return;
+        }
+
+        Dialog<Void> dialog = new Dialog<>();
+        dialog.setTitle("豆包图生图");
+        applyMainStyles(dialog);
+
+        VBox headerBox = new VBox(5);
+        headerBox.setAlignment(Pos.CENTER);
+        headerBox.setPadding(new Insets(0, 0, 15, 0));
+        Label iconLbl = new Label("🎨");
+        iconLbl.setStyle("-fx-font-size: 40px;");
+        Label titleLbl = new Label("AI 灵感创作");
+        titleLbl.setStyle("-fx-font-size: 18px; -fx-font-weight: bold;");
+        headerBox.getChildren().addAll(iconLbl, titleLbl);
+
+        VBox promptBox = new VBox(8);
+        Label pLabel = new Label("✨ 你的创意指令:");
+        TextArea pArea = new TextArea();
+        pArea.setPromptText("例如：把背景变成赛博朋克风格的街道...");
+        pArea.setWrapText(true);
+        pArea.setPrefHeight(80);
+        promptBox.getChildren().addAll(pLabel, pArea);
+
+        GridPane settings = new GridPane();
+        settings.setHgap(10); settings.setVgap(10);
+        TextField dirField = new TextField("D:/generated_images/");
+        Button browseBtn = new Button("📂");
+        browseBtn.setOnAction(e -> {
+            DirectoryChooser dc = new DirectoryChooser();
+            File f = dc.showDialog(null);
+            if (f != null) dirField.setText(f.getAbsolutePath());
+        });
+        TextField nameField = new TextField("ai_" + System.currentTimeMillis());
+
+        settings.add(new Label("保存位置:"), 0, 0);
+        settings.add(dirField, 1, 0);
+        settings.add(browseBtn, 2, 0);
+        settings.add(new Label("文件命名:"), 0, 1);
+        settings.add(nameField, 1, 1);
+        GridPane.setHgrow(dirField, Priority.ALWAYS);
+
+        VBox statusBox = new VBox(5);
+        Label statusLabel = new Label("准备就绪");
+        statusLabel.setAlignment(Pos.CENTER);
+        statusLabel.setMaxWidth(Double.MAX_VALUE);
+        ProgressBar pBar = new ProgressBar();
+        pBar.setVisible(false);
+        pBar.setMaxWidth(Double.MAX_VALUE);
+        statusBox.getChildren().addAll(statusLabel, pBar);
+
+        Button genBtn = new Button("🚀 立即生成");
+        genBtn.setMaxWidth(Double.MAX_VALUE);
+        genBtn.setPrefHeight(40);
+        genBtn.setStyle("-fx-background-color: #667eea; -fx-text-fill: white; -fx-font-weight: bold;");
+
+        VBox content = new VBox(20);
+        content.setPadding(new Insets(25));
+        content.setPrefWidth(450);
+        content.getChildren().addAll(headerBox, promptBox, settings, statusBox, genBtn);
+
+        dialog.getDialogPane().setContent(content);
+        dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
+        dialog.getDialogPane().lookupButton(ButtonType.CLOSE).setVisible(false);
+
+        genBtn.setOnAction(e -> {
+            String prompt = pArea.getText().trim();
+            if (prompt.isEmpty()) { showError("提示", "请输入提示词"); return; }
+
+            pArea.setDisable(true); genBtn.setDisable(true); pBar.setVisible(true);
+            statusLabel.setText("AI 正在绘图...");
+
+            new Thread(() -> {
+                try {
+                    String path = controller.getArkManager().generateImage(
+                            controller.getImageManager().getCurrentImageFile().getAbsolutePath(),
+                            prompt, dirField.getText(), nameField.getText());
+
+                    Platform.runLater(() -> {
+                        statusLabel.setText("生成成功！"); pBar.setVisible(false);
+                        Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
+                        alert.setTitle("创作完成");
+                        alert.setHeaderText("生成成功");
+                        alert.setContentText("是否立即打开？\n" + path);
+                        applyMainStyles(alert);
+                        alert.showAndWait().ifPresent(r -> {
+                            if(r == ButtonType.OK) {
+                                controller.getImageManager().loadImage(new File(path));
+                                dialog.close();
+                            } else {
+                                pArea.setDisable(false); genBtn.setDisable(false);
+                                nameField.setText("ai_" + System.currentTimeMillis());
+                            }
+                        });
+                    });
+                } catch (Exception ex) {
+                    Platform.runLater(() -> {
+                        statusLabel.setText("失败: " + ex.getMessage());
+                        pBar.setVisible(false);
+                        pArea.setDisable(false); genBtn.setDisable(false);
+                    });
+                }
+            }).start();
+        });
+
+        dialog.showAndWait();
+    }
+
+    // ==================== 4. 其他对话框 (已修复关于页面) ====================
 
     public void showThemeSelector() {
         Dialog<ThemeManager.Theme> dialog = new Dialog<>();
@@ -546,40 +691,67 @@ public class DialogManager {
         choiceDialog.showAndWait().ifPresent(callback);
     }
 
-    public void showArkImageDialog() {
-        if (!controller.getArkManager().isAvailable()) {
-            showError("功能未就绪", "请检查config.properties配置");
-            return;
-        }
-        if (controller.getImageManager().getCurrentImageFile() == null) {
-            showError("提示", "请先在主界面加载一张参考图片");
-            return;
-        }
-        showWarning("提示", "豆包AI图生图功能代码较长，如需恢复请从上个版本复制 showArkImageDialog 方法。");
-    }
-
     public void showHelp() {
         Dialog<Void> dialog = new Dialog<>();
         dialog.setTitle("关于");
         applyMainStyles(dialog);
+
         VBox content = new VBox(20);
         content.setAlignment(Pos.CENTER);
         content.setPadding(new Insets(30));
         content.setPrefWidth(400);
-        Label titleLbl = new Label("AI Image Editor Pro");
-        titleLbl.setStyle("-fx-font-size: 20px; -fx-font-weight: bold;");
+
+        StackPane logoPane = new StackPane();
+        Circle bg = new Circle(40, Color.web("#667eea"));
+        Label icon = new Label("🎨");
+        icon.setStyle("-fx-font-size: 40px; -fx-text-fill: white;");
+        logoPane.getChildren().addAll(bg, icon);
+        logoPane.setEffect(new DropShadow(15, Color.rgb(102, 126, 234, 0.4)));
+
+        Label title = new Label("AI Image Editor Pro");
+        title.setStyle("-fx-font-size: 20px; -fx-font-weight: bold; -fx-text-fill: #111827;");
         Label ver = new Label("Version 3.1.0 Ultimate");
-        content.getChildren().addAll(titleLbl, ver);
+        ver.setStyle("-fx-text-fill: #9ca3af; -fx-font-size: 12px;");
+
+        VBox keys = new VBox(8);
+        keys.setStyle("-fx-background-color: #f9fafb; -fx-padding: 15; -fx-background-radius: 8;");
+        keys.getChildren().addAll(
+                createKeyRow("Ctrl + O", "打开图片"),
+                createKeyRow("Ctrl + S", "保存图片"),
+                createKeyRow("Ctrl + Z", "撤销操作"),
+                createKeyRow("Ctrl + T", "切换主题")
+        );
+
+        Button closeBtn = new Button("我知道了");
+        closeBtn.setPrefWidth(120);
+        closeBtn.setStyle("-fx-background-color: #667eea; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 20; -fx-cursor: hand;");
+        closeBtn.setOnAction(e -> dialog.close());
+
+        content.getChildren().addAll(logoPane, title, ver, keys, closeBtn);
+
         dialog.getDialogPane().setContent(content);
         dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
+        dialog.getDialogPane().lookupButton(ButtonType.CLOSE).setVisible(false);
+
         dialog.showAndWait();
+    }
+
+    private HBox createKeyRow(String key, String desc) {
+        HBox row = new HBox(10);
+        Label k = new Label(key);
+        k.setStyle("-fx-font-family: 'Consolas'; -fx-font-weight: bold; -fx-text-fill: #667eea; -fx-background-color: rgba(102,126,234,0.1); -fx-padding: 2 6; -fx-background-radius: 4;");
+        Label d = new Label(desc);
+        d.setStyle("-fx-text-fill: #4b5563;");
+        Region sp = new Region();
+        HBox.setHgrow(sp, Priority.ALWAYS);
+        row.getChildren().addAll(d, sp, k);
+        return row;
     }
 
     public void showCropDialog(int imageWidth, int imageHeight, Consumer<java.awt.Rectangle> onAccept) {
         Dialog<java.awt.Rectangle> dialog = new Dialog<>();
         dialog.setTitle("裁剪图片");
         applyMainStyles(dialog);
-        // ... (省略裁剪弹窗的旧逻辑)
     }
 
     private void applyMainStyles(Dialog<?> dialog) {
