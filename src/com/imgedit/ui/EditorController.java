@@ -59,6 +59,11 @@ public class EditorController {
     public EditorController(Stage stage) {
         this.primaryStage = stage;
     }
+    public void refreshImageInfo() {
+        if (uiManager != null) {
+            uiManager.refreshImageInfo();
+        }
+    }
 
     public void start() {
         // 1. 加载配置

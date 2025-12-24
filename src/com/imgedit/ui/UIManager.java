@@ -2,6 +2,7 @@ package imgedit.ui;
 
 import imgedit.core.operations.*;
 import javafx.animation.*;
+import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.geometry.Orientation;
@@ -711,6 +712,8 @@ public class UIManager {
         ScrollPane scrollPane = new ScrollPane(content);
         scrollPane.setFitToWidth(true);
         scrollPane.setStyle("-fx-background: transparent; -fx-background-color: transparent;");
+        // 立即更新一次图像信息（如果有图像已加载）
+        Platform.runLater(() -> updateImageInfo());
         return scrollPane;
     }
 
@@ -728,32 +731,81 @@ public class UIManager {
 
     // 更新图像信息
     public void updateImageInfo() {
-        if (controller.getImageManager().getCurrentImage() == null) return;
+        // 安全检查：确保控制器的根节点存在
+        if (controller.getRoot() == null) return;
 
+        // 获取当前图像
         Image img = controller.getImageManager().getCurrentImage();
+
+        // 通过ID查找标签
         Label sizeLbl = (Label) controller.getRoot().lookup("#size-label");
         Label formatLbl = (Label) controller.getRoot().lookup("#format-label");
         Label fileLbl = (Label) controller.getRoot().lookup("#filesize-label");
 
-        if (sizeLbl != null) {
-            sizeLbl.setText((int)img.getWidth() + " x " + (int)img.getHeight());
+        // 如果没有图像，重置为默认值
+        if (img == null) {
+            if (sizeLbl != null) sizeLbl.setText("-- x --");
+            if (formatLbl != null) formatLbl.setText("--");
+            if (fileLbl != null) fileLbl.setText("-- KB");
+            return;
         }
 
+        // 更新尺寸信息
+        if (sizeLbl != null) {
+            sizeLbl.setText(String.format("%d x %d",
+                    (int)img.getWidth(),
+                    (int)img.getHeight()
+            ));
+        }
+
+        // 尝试获取文件信息
         try {
             File file = controller.getImageManager().getCurrentImageFile();
-            if (file != null) {
+            if (file != null && file.exists()) {
+                // 更新格式信息
                 if (formatLbl != null) {
                     String name = file.getName();
-                    String ext = name.contains(".") ? name.substring(name.lastIndexOf(".") + 1).toUpperCase() : "UNK";
+                    String ext = "UNK";
+                    if (name.contains(".")) {
+                        ext = name.substring(name.lastIndexOf(".") + 1).toUpperCase();
+                    }
                     formatLbl.setText(ext);
                 }
+
+                // 更新文件大小信息
                 if (fileLbl != null) {
-                    long sizeKB = file.length() / 1024;
-                    fileLbl.setText(sizeKB + " KB");
+                    long sizeBytes = file.length();
+                    String sizeText;
+                    if (sizeBytes < 1024) {
+                        sizeText = sizeBytes + " B";
+                    } else if (sizeBytes < 1024 * 1024) {
+                        sizeText = String.format("%.1f KB", sizeBytes / 1024.0);
+                    } else {
+                        sizeText = String.format("%.1f MB", sizeBytes / (1024.0 * 1024.0));
+                    }
+                    fileLbl.setText(sizeText);
+                }
+            } else {
+                // 如果没有文件信息（例如新建的图像），显示估算值
+                if (formatLbl != null) formatLbl.setText("PNG"); // 默认格式
+                if (fileLbl != null) {
+                    // 估算文件大小：基于图像尺寸和格式
+                    int pixelCount = (int)(img.getWidth() * img.getHeight());
+                    long estimatedSize = pixelCount * 4; // 假设RGBA，4字节/像素
+                    if (estimatedSize < 1024) {
+                        fileLbl.setText(estimatedSize + " B");
+                    } else if (estimatedSize < 1024 * 1024) {
+                        fileLbl.setText(String.format("%.1f KB", estimatedSize / 1024.0));
+                    } else {
+                        fileLbl.setText(String.format("%.1f MB", estimatedSize / (1024.0 * 1024.0)));
+                    }
                 }
             }
         } catch (Exception e) {
-            // 忽略文件信息错误
+            // 错误处理：显示占位符
+            if (formatLbl != null) formatLbl.setText("--");
+            if (fileLbl != null) fileLbl.setText("-- KB");
+            System.err.println("更新图像信息时出错: " + e.getMessage());
         }
     }
 
@@ -1247,7 +1299,9 @@ public class UIManager {
             loadingOverlay.toFront();
         }
     }
-
+    public void refreshImageInfo() {
+        updateImageInfo();
+    }
     public void hideProgress() {
         if (loadingOverlay != null) {
             loadingOverlay.setVisible(false);

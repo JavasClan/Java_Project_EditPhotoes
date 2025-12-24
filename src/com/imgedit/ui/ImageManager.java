@@ -129,6 +129,9 @@ public class ImageManager {
                         controller.getImageEditorService().initImageProcessor(currentImage);
                     }
 
+                    // 更新图像信息
+                    controller.refreshImageInfo();
+
                     addHistory("打开图片: " + file.getName());
                     controller.updateStatus("图片已加载: " + file.getName() + " (" +
                             (int)currentImage.getWidth() + "×" + (int)currentImage.getHeight() + ")");
@@ -175,10 +178,16 @@ public class ImageManager {
 
                     ImageIO.write(bufferedImage, format, file);
 
+                    // 更新当前文件
+                    currentImageFile = file;
+
                     Platform.runLater(() -> {
                         controller.hideProgress();
                         controller.updateStatus("图片已保存: " + file.getName());
                         controller.showSuccess("保存成功", "图片已保存到: " + file.getAbsolutePath());
+
+                        // 更新图像信息（特别是文件大小可能已改变）
+                        controller.refreshImageInfo();
                     });
 
                 } catch (Exception e) {
