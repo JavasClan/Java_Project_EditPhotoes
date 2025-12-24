@@ -328,7 +328,8 @@ public class UIManager {
         toolGrid.add(rectTool, 0, 2);
         toolGrid.add(circleTool, 1, 2);
 
-        VBox drawingSettings = createDrawingSettingsPanel();
+        // 传入 toolGroup，以便内部进行监听和切换
+        VBox drawingSettings = createDrawingSettingsPanel(toolGroup);
         drawingSettings.setVisible(false);
 
         toolGroup.selectedToggleProperty().addListener((obs, oldVal, newVal) -> {
@@ -354,50 +355,78 @@ public class UIManager {
         return btn;
     }
 
-    // === 修复与美化后的画笔设置面板 ===
-    private VBox createDrawingSettingsPanel() {
+    // === 修正：将字号上限大幅提高至 800 ===
+    private VBox createDrawingSettingsPanel(ToggleGroup toolGroup) {
         VBox panel = new VBox(10);
         panel.setPadding(new Insets(15));
-        // 添加 CSS 类以便美化
         panel.getStyleClass().add("settings-panel");
-        // 保留一个默认样式作为兜底
         panel.setStyle("-fx-background-color: rgba(255,255,255,0.6); -fx-background-radius: 8;");
 
-        Label settingsLabel = new Label("画笔/文字设置");
+        Label settingsLabel = new Label("工具设置");
         settingsLabel.setStyle("-fx-font-size: 13px; -fx-font-weight: bold;");
 
-        // 颜色选择
+        // --- 颜色选择 (公用) ---
         HBox colorBox = new HBox(10);
         colorBox.setAlignment(Pos.CENTER_LEFT);
-
         Label colorLabel = new Label("颜色:");
         ColorPicker colorPicker = new ColorPicker(Color.BLACK);
-        colorPicker.getStyleClass().add("color-picker"); // CSS类
-
+        colorPicker.getStyleClass().add("color-picker");
         colorPicker.valueProperty().addListener((obs, oldVal, newVal) -> {
             controller.getToolManager().setBrushColor(newVal);
         });
-
         colorBox.getChildren().addAll(colorLabel, colorPicker);
 
-        // 大小选择
-        HBox sizeBox = new HBox(10);
-        sizeBox.setAlignment(Pos.CENTER_LEFT);
-        Label sizeLabel = new Label("大小:");
-
-        // 【关键修复】将最大值从 50 改为 300，解决大图文字太小的问题
-        Spinner<Integer> brushSizeSpinner = new Spinner<>(1, 300, 24);
+        // --- A. 画笔大小控制 (用于画笔、矩形、圆形) ---
+        HBox brushSizeBox = new HBox(10);
+        brushSizeBox.setAlignment(Pos.CENTER_LEFT);
+        Label brushSizeLabel = new Label("笔触:"); // 区分名称
+        Spinner<Integer> brushSizeSpinner = new Spinner<>(1, 100, 5); // 默认 5
         brushSizeSpinner.setEditable(true);
-        brushSizeSpinner.getStyleClass().add("spinner"); // CSS类
-
-        // 监听器必须在定义之后
+        brushSizeSpinner.getStyleClass().add("spinner");
         brushSizeSpinner.valueProperty().addListener((obs, oldVal, newVal) -> {
             controller.getToolManager().setBrushSize(newVal);
         });
+        brushSizeBox.getChildren().addAll(brushSizeLabel, brushSizeSpinner);
 
-        sizeBox.getChildren().addAll(sizeLabel, brushSizeSpinner);
+        // --- B. 文字大小控制 (专门用于文字工具) ---
+        HBox textSizeBox = new HBox(10);
+        textSizeBox.setAlignment(Pos.CENTER_LEFT);
+        Label textSizeLabel = new Label("字号:"); // 区分名称
 
-        panel.getChildren().addAll(settingsLabel, colorBox, sizeBox);
+        // 【修改】将最大值从 200 改为 800，默认值设为 60
+        Spinner<Integer> textSizeSpinner = new Spinner<>(10, 800, 60);
+
+        textSizeSpinner.setEditable(true);
+        textSizeSpinner.getStyleClass().add("spinner");
+        textSizeSpinner.valueProperty().addListener((obs, oldVal, newVal) -> {
+            controller.getToolManager().setTextSize(newVal);
+        });
+        textSizeBox.getChildren().addAll(textSizeLabel, textSizeSpinner);
+
+        // --- 关键逻辑: 根据当前选中的工具切换显示哪一个控制条 ---
+        toolGroup.selectedToggleProperty().addListener((obs, oldVal, newVal) -> {
+            if (newVal != null) {
+                ToggleButton btn = (ToggleButton) newVal;
+                // 判断是否是文字工具 (根据 createToolButton 中的文本 "A 文字" 判断)
+                boolean isTextTool = btn.getText().contains("文字");
+
+                // 更新标题
+                settingsLabel.setText(isTextTool ? "文字设置" : "画笔设置");
+
+                // 切换可见性
+                brushSizeBox.setVisible(!isTextTool);
+                brushSizeBox.setManaged(!isTextTool);
+
+                textSizeBox.setVisible(isTextTool);
+                textSizeBox.setManaged(isTextTool);
+            }
+        });
+
+        // 默认初始化状态 (假设默认不是文字工具)
+        textSizeBox.setVisible(false);
+        textSizeBox.setManaged(false);
+
+        panel.getChildren().addAll(settingsLabel, colorBox, brushSizeBox, textSizeBox);
         return panel;
     }
 
@@ -503,6 +532,9 @@ public class UIManager {
         Canvas selectionCanvas = new Canvas();
         selectionCanvas.setMouseTransparent(true);
         selectionCanvas.setId("selection-canvas");
+
+        // 【关键修改】将 UI 创建的这个画布，注册给 Controller
+        controller.setSelectionCanvas(selectionCanvas);
 
         Pane interactionOverlay = new Pane();
         interactionOverlay.setStyle("-fx-background-color: transparent;");

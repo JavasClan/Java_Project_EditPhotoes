@@ -34,6 +34,10 @@ public class ToolManager {
     // 默认画笔样式
     private DrawingOperation.BrushStyle currentBrushStyle = new DrawingOperation.BrushStyle(
             java.awt.Color.BLACK, 3, 1.0f);
+
+    // 【新增】独立存储文字大小，默认 40
+    private int currentTextSize = 40;
+
     private boolean isDrawing = false;
 
     // 形状绘制
@@ -272,7 +276,11 @@ public class ToolManager {
             CropOperation operation = new CropOperation(x, y, width, height);
             controller.getImageManager().applyOperation(operation, "裁剪图片");
             cropSelection = null;
-            // 清理动作在 handleMouseReleased 的 finally 块中统一处理
+
+            // 【关键修改】强制立即清理画布，防止裁剪后蓝框残留在新图上
+            clearSelectionCanvasImmediately();
+
+            // 清理动作在 handleMouseReleased 的 finally 块中也会处理，但这里显式调用更安全
             controller.updateStatus(String.format("裁剪完成: %dx%d", width, height));
         } catch (Exception e) {
             controller.showError("裁剪失败", e.getMessage());
@@ -457,8 +465,8 @@ public class ToolManager {
                 "", text -> {
                     if (text != null && !text.isEmpty()) {
 
-                        // 使用画笔粗细作为字体大小
-                        int fontSize = currentBrushStyle.getThickness();
+                        // 【修改】使用独立的文字大小变量，不再依赖画笔粗细
+                        int fontSize = currentTextSize;
                         if (fontSize < 10) fontSize = 10;
 
                         DrawingOperation.TextStyle textStyle = new DrawingOperation.TextStyle(
@@ -536,7 +544,7 @@ public class ToolManager {
     }
 
     /**
-     * 设置画笔粗细 (同时影响字体大小)
+     * 设置画笔粗细
      */
     public void setBrushSize(Number size) {
         this.currentBrushStyle = new DrawingOperation.BrushStyle(
@@ -544,6 +552,13 @@ public class ToolManager {
                 size.intValue(),
                 this.currentBrushStyle.getOpacity()
         );
+    }
+
+    /**
+     * 【新增】设置文字大小
+     */
+    public void setTextSize(int size) {
+        this.currentTextSize = size;
     }
 
     public DrawingOperation.BrushStyle getCurrentBrushStyle() {
